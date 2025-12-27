@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1766633981341,
+      "tag": "0000_illegal_black_bird",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1766634097510,
+      "tag": "0001_cooing_sway",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1766639704474,
+      "tag": "0002_lame_zaran",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1766639892718,
+      "tag": "0003_jittery_squadron_supreme",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1766641742120,
+      "tag": "0004_nebulous_raider",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1766642296211,
+      "tag": "0005_yummy_vindicator",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1766642745180,
+      "tag": "0006_plain_paper_doll",
+      "breakpoints": true
+    }
+  ]
+}

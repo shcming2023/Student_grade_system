@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成绩单管理 - 橡心国际WTF活动管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="bi bi-mortarboard-fill me-2"></i>橡心国际WTF平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="bi bi-speedometer2"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_sessions') }}">
+                            <i class="bi bi-calendar-event"></i> 考试场次
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_templates') }}">
+                            <i class="bi bi-file-earmark-text"></i> 试卷管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('students') }}">
+                            <i class="bi bi-people"></i> 学生管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('score_entry') }}">
+                            <i class="bi bi-pencil-square"></i> 评分录入
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('report_cards') }}">
+                            <i class="bi bi-file-earmark-pdf"></i> 成绩单
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>
+                        <i class="bi bi-file-earmark-pdf-fill text-primary me-2"></i>
+                        成绩单管理
+                    </h2>
+                    <div>
+                        <button class="btn btn-outline-primary" onclick="refreshData()">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新
+                        </button>
+                        <button class="btn btn-success" onclick="batchGenerate()">
+                            <i class="bi bi-download"></i> 批量生成PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 筛选条件 -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-funnel me-2"></i>
+                            筛选条件
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label class="form-label">考试场次:</label>
+                                <select class="form-select" id="examSessionFilter" onchange="loadReportCards()">
+                                    <option value="">请选择考试场次</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">年级:</label>
+                                <select class="form-select" id="gradeFilter" onchange="loadReportCards()">
+                                    <option value="">全部年级</option>
+                                    <option value="G1">G1</option>
+                                    <option value="G2">G2</option>
+                                    <option value="G3">G3</option>
+                                    <option value="G4">G4</option>
+                                    <option value="G5">G5</option>
+                                    <option value="G6">G6</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">科目:</label>
+                                <select class="form-select" id="subjectFilter" onchange="loadReportCards()">
+                                    <option value="">全部科目</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">生成状态:</label>
+                                <select class="form-select" id="statusFilter" onchange="loadReportCards()">
+                                    <option value="">全部状态</option>
+                                    <option value="completed">已完成</option>
+                                    <option value="pending">待评分</option>
+                                    <option value="partial">部分完成</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 成绩单列表 -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-list-ul me-2"></i>
+                            成绩单列表
+                        </h5>
+                        <span class="badge bg-light text-dark" id="totalCount">共 0 条记录</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="reportCardsTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>学生姓名</th>
+                                        <th>学号</th>
+                                        <th>年级</th>
+                                        <th>学校</th>
+                                        <th>考试场次</th>
+                                        <th>科目</th>
+                                        <th>得分</th>
+                                        <th>正确率</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reportCardsTableBody">
+                                    <!-- 数据将通过JavaScript加载 -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- 分页 -->
+                        <nav aria-label="Page navigation">
+                            <ul class="pagination justify-content-center" id="pagination">
+                                <!-- 分页将通过JavaScript生成 -->
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+
+                <!-- 批量操作区域 -->
+                <div class="card mt-4" id="batchActions" style="display: none;">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">
+                            <i class="bi bi-check-square me-2"></i>
+                            批量操作
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-2">已选择 <span id="selectedCount" class="badge bg-primary">0</span> 个学生</p>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <button class="btn btn-success" onclick="generateSelectedPDFs()">
+                                    <i class="bi bi-file-earmark-pdf"></i> 生成选中PDF
+                                </button>
+                                <button class="btn btn-info" onclick="emailSelected()">
+                                    <i class="bi bi-envelope"></i> 发送邮件
+                                </button>
+                                <button class="btn btn-secondary" onclick="clearSelection()">
+                                    <i class="bi bi-x-square"></i> 清除选择
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 预览模态框 -->
+    <div class="modal fade" id="previewModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">成绩单预览</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <iframe id="previewFrame" width="100%" height="600px" frameborder="0"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentPage = 1;
+        let pageSize = 20;
+        let totalPages = 1;
+        let selectedStudents = new Set();
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadExamSessions();
+            loadReportCards();
+        });
+
+        // 加载考试场次
+        function loadExamSessions() {
+            fetch('/api/exam-sessions')
+                .then(response => response.json())
+                .then(data => {
+                    const select = document.getElementById('examSessionFilter');
+                    select.innerHTML = '<option value="">请选择考试场次</option>';
+                    data.sessions.forEach(session => {
+                        const option = document.createElement('option');
+                        option.value = session.id;
+                        option.textContent = `${session.name} - ${session.exam_date}`;
+                        select.appendChild(option);
+                    });
+                });
+        }
+
+        // 加载成绩单数据
+        function loadReportCards(page = 1) {
+            const examSessionId = document.getElementById('examSessionFilter').value;
+            const grade = document.getElementById('gradeFilter').value;
+            const subject = document.getElementById('subjectFilter').value;
+            const status = document.getElementById('statusFilter').value;
+
+            const params = new URLSearchParams({
+                page: page,
+                pageSize: pageSize
+            });
+
+            if (examSessionId) params.append('examSessionId', examSessionId);
+            if (grade) params.append('grade', grade);
+            if (subject) params.append('subject', subject);
+            if (status) params.append('status', status);
+
+            fetch(`/api/report-cards?${params}`)
+                .then(response => response.json())
+                .then(data => {
+                    renderReportCards(data.reportCards);
+                    renderPagination(data.currentPage, data.totalPages, data.totalCount);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('加载数据失败');
+                });
+        }
+
+        // 渲染成绩单表格
+        function renderReportCards(reportCards) {
+            const tbody = document.getElementById('reportCardsTableBody');
+            tbody.innerHTML = '';
+
+            reportCards.forEach(card => {
+                const row = document.createElement('tr');
+                
+                // 状态样式
+                let statusBadge = '';
+                if (card.status === 'completed') {
+                    statusBadge = '<span class="badge bg-success">已完成</span>';
+                } else if (card.status === 'pending') {
+                    statusBadge = '<span class="badge bg-warning">待评分</span>';
+                } else {
+                    statusBadge = '<span class="badge bg-info">部分完成</span>';
+                }
+
+                // 正确率样式
+                let accuracyBadge = '';
+                if (card.accuracy >= 90) {
+                    accuracyBadge = `<span class="badge bg-success">${card.accuracy}%</span>`;
+                } else if (card.accuracy >= 70) {
+                    accuracyBadge = `<span class="badge bg-warning">${card.accuracy}%</span>`;
+                } else {
+                    accuracyBadge = `<span class="badge bg-danger">${card.accuracy}%</span>`;
+                }
+
+                row.innerHTML = `
+                    <td>
+                        <input type="checkbox" class="form-check-input me-2" 
+                               onchange="toggleSelection(${card.studentId})"
+                               ${selectedStudents.has(card.studentId) ? 'checked' : ''}>
+                        ${card.studentName}
+                    </td>
+                    <td>${card.studentId}</td>
+                    <td><span class="badge bg-info">${card.grade}</span></td>
+                    <td>${card.schoolName}</td>
+                    <td>${card.examSessionName}</td>
+                    <td><span class="badge bg-secondary">${card.subjectName}</span></td>
+                    <td><strong>${card.totalScore}</strong> / ${card.maxScore}</td>
+                    <td>${accuracyBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="previewReportCard(${card.studentId}, ${card.examSessionId})">
+                                <i class="bi bi-eye"></i> 预览
+                            </button>
+                            <button class="btn btn-outline-success" onclick="downloadPDF(${card.studentId}, ${card.examSessionId})">
+                                <i class="bi bi-download"></i> PDF
+                            </button>
+                            <button class="btn btn-outline-info" onclick="emailReportCard(${card.studentId})">
+                                <i class="bi bi-envelope"></i> 邮件
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            // 更新总数
+            document.getElementById('totalCount').textContent = `共 ${reportCards.length} 条记录`;
+        }
+
+        // 渲染分页
+        function renderPagination(current, total, totalCount) {
+            currentPage = current;
+            totalPages = total;
+            
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            // 上一页
+            if (current > 1) {
+                pagination.innerHTML += `<li class="page-item"><a class="page-link" href="#" onclick="loadReportCards(${current - 1})">上一页</a></li>`;
+            }
+
+            // 页码
+            for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) {
+                const active = i === current ? 'active' : '';
+                pagination.innerHTML += `<li class="page-item ${active}"><a class="page-link" href="#" onclick="loadReportCards(${i})">${i}</a></li>`;
+            }
+
+            // 下一页
+            if (current < total) {
+                pagination.innerHTML += `<li class="page-item"><a class="page-link" href="#" onclick="loadReportCards(${current + 1})">下一页</a></li>`;
+            }
+        }
+
+        // 切换选择
+        function toggleSelection(studentId) {
+            if (selectedStudents.has(studentId)) {
+                selectedStudents.delete(studentId);
+            } else {
+                selectedStudents.add(studentId);
+            }
+            updateBatchActions();
+        }
+
+        // 更新批量操作区域
+        function updateBatchActions() {
+            const count = selectedStudents.size;
+            document.getElementById('selectedCount').textContent = count;
+            document.getElementById('batchActions').style.display = count > 0 ? 'block' : 'none';
+        }
+
+        // 预览成绩单
+        function previewReportCard(studentId, examSessionId) {
+            // 这里可以实现在线预览功能
+            // 暂时使用PDF预览
+            window.open(`/pdf/report-card/${studentId}/${examSessionId}`, '_blank');
+        }
+
+        // 下载PDF
+        function downloadPDF(studentId, examSessionId) {
+            window.location.href = `/pdf/report-card/${studentId}/${examSessionId}`;
+        }
+
+        // 邮件发送
+        function emailReportCard(studentId) {
+            alert('邮件发送功能开发中...');
+        }
+
+        // 批量生成PDF
+        function batchGenerate() {
+            const examSessionId = document.getElementById('examSessionFilter').value;
+            if (!examSessionId) {
+                alert('请先选择考试场次');
+                return;
+            }
+
+            if (confirm('确定要批量生成该场次所有学生的成绩单PDF吗？')) {
+                window.location.href = `/pdf/batch-report-cards/${examSessionId}`;
+            }
+        }
+
+        // 生成选中PDF
+        function generateSelectedPDFs() {
+            if (selectedStudents.size === 0) {
+                alert('请先选择学生');
+                return;
+            }
+
+            alert('生成选中PDF功能开发中...');
+        }
+
+        // 发送邮件
+        function emailSelected() {
+            if (selectedStudents.size === 0) {
+                alert('请先选择学生');
+                return;
+            }
+
+            alert('批量邮件发送功能开发中...');
+        }
+
+        // 清除选择
+        function clearSelection() {
+            selectedStudents.clear();
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+            updateBatchActions();
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadReportCards(currentPage);
+        }
+    </script>
+</body>
+</html>

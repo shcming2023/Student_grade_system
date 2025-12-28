@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>评分录入 - 橡心国际WTF活动管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+    <style>
+        /* iPad优化样式 */
+        @media (max-width: 1024px) {
+            .score-entry-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .score-input {
+                font-size: 18px;
+                height: 60px;
+                padding: 10px;
+            }
+            
+            .question-card {
+                margin-bottom: 15px;
+                padding: 15px;
+            }
+            
+            .action-buttons .btn {
+                font-size: 16px;
+                padding: 12px 20px;
+                margin: 5px;
+            }
+        }
+        
+        .score-input:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+            transform: scale(1.02);
+            transition: all 0.2s ease;
+        }
+        
+        .question-card {
+            border-left: 4px solid #0d6efd;
+            transition: all 0.3s ease;
+        }
+        
+        .question-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .score-entry-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .student-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .quick-score-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .quick-score-btn {
+            width: 60px;
+            height: 40px;
+            font-weight: bold;
+        }
+        
+        .progress-indicator {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .keyboard-shortcuts {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="bi bi-mortarboard-fill me-2"></i>橡心国际WTF平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="bi bi-speedometer2"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_sessions') }}">
+                            <i class="bi bi-calendar-event"></i> 考试场次
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('question_templates') }}">
+                            <i class="bi bi-file-earmark-text"></i> 题目模板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('students') }}">
+                            <i class="bi bi-people"></i> 学生管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('score_entry') }}">
+                            <i class="bi bi-pencil-square"></i> 评分录入
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 进度指示器 -->
+    <div class="progress-indicator" id="progressIndicator" style="display: none;">
+        <h6>录入进度</h6>
+        <div class="progress mb-2">
+            <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+        </div>
+        <small>已完成: <span id="completedCount">0</span> / <span id="totalCount">0</span></small>
+    </div>
+
+    <!-- 键盘快捷键提示 -->
+    <div class="keyboard-shortcuts" id="keyboardHints" style="display: none;">
+        <h6>快捷键</h6>
+        <div>Ctrl + Enter: 保存当前</div>
+        <div>Ctrl + N: 下一个学生</div>
+        <div>Ctrl + P: 上一个学生</div>
+        <div>Esc: 关闭提示</div>
+    </div>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>
+                        <i class="bi bi-pencil-square-fill text-primary me-2"></i>
+                        评分录入
+                    </h2>
+                    <div>
+                        <button class="btn btn-outline-success me-2" onclick="importScores()">
+                            <i class="bi bi-file-earmark-excel"></i> 导入成绩
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="toggleKeyboardHints()">
+                            <i class="bi bi-keyboard"></i> 快捷键
+                        </button>
+                        <button class="btn btn-outline-primary" onclick="saveProgress()">
+                            <i class="bi bi-save"></i> 保存进度
+                        </button>
+                        <button class="btn btn-success" onclick="submitAll()">
+                            <i class="bi bi-check-circle"></i> 提交全部
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 考试场次和学生选择 -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-funnel me-2"></i>
+                            筛选条件
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label class="form-label">考试场次:</label>
+                                <select class="form-select" id="examSessionSelect" onchange="loadStudents()">
+                                    <option value="">请选择考试场次</option>
+                                    {% for session in exam_sessions %}
+                                    <option value="{{ session.id }}">{{ session.name }} - {{ session.exam_date }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">年级:</label>
+                                <select class="form-select" id="gradeSelect" onchange="loadStudents()">
+                                    <option value="">全部年级</option>
+                                    <option value="G1">G1</option>
+                                    <option value="G2">G2</option>
+                                    <option value="G3">G3</option>
+                                    <option value="G4">G4</option>
+                                    <option value="G5">G5</option>
+                                    <option value="G6">G6</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">科目:</label>
+                                <select class="form-select" id="subjectSelect" onchange="loadStudents()">
+                                    <option value="">全部科目</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">搜索学生:</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="studentSearch" placeholder="姓名或学号">
+                                    <button class="btn btn-outline-secondary" onclick="searchStudent()">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 学生列表和评分区域 -->
+                <div id="scoreEntryArea" style="display: none;">
+                    <!-- 学生信息卡片 -->
+                    <div class="student-info" id="studentInfo" style="display: none;">
+                        <h4 id="studentName">-</h4>
+                        <p class="mb-1">
+                            <strong>学号:</strong> <span id="studentId">-</span> | 
+                            <strong>年级:</strong> <span id="studentGrade">-</span> | 
+                            <strong>学校:</strong> <span id="studentSchool">-</span>
+                        </p>
+                        <p class="mb-1">
+                            <strong>考试科目:</strong> <span id="examSubject">-</span> | 
+                            <strong>题目数量:</strong> <span id="questionCount">-</span>
+                        </p>
+                    </div>
+
+                    <!-- 导航按钮 -->
+                    <div class="d-flex justify-content-between align-items-center mb-3 action-buttons">
+                        <button class="btn btn-outline-primary" onclick="previousStudent()" id="prevBtn" disabled>
+                            <i class="bi bi-chevron-left"></i> 上一个学生
+                        </button>
+                        <span class="badge bg-info fs-6" id="studentCounter">0 / 0</span>
+                        <button class="btn btn-outline-primary" onclick="nextStudent()" id="nextBtn" disabled>
+                            下一个学生 <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
+
+                    <!-- 题目评分网格 -->
+                    <div class="score-entry-grid" id="questionsGrid">
+                        <!-- 题目将通过JavaScript动态加载 -->
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="text-center mt-4 action-buttons">
+                        <button class="btn btn-warning btn-lg" onclick="clearCurrent()">
+                            <i class="bi bi-x-circle"></i> 清空当前
+                        </button>
+                        <button class="btn btn-primary btn-lg" onclick="saveCurrent()">
+                            <i class="bi bi-save"></i> 保存当前
+                        </button>
+                        <button class="btn btn-success btn-lg" onclick="saveAndNext()">
+                            <i class="bi bi-arrow-right-circle"></i> 保存并下一个
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 空状态提示 -->
+                <div id="emptyState" class="text-center py-5">
+                    <i class="bi bi-clipboard-data text-muted" style="font-size: 4rem;"></i>
+                    <h4 class="text-muted mt-3">请选择考试场次开始评分录入</h4>
+                    <p class="text-muted">选择考试场次和年级后，系统将自动加载待评分学生列表</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentStudentIndex = 0;
+        let students = [];
+        let questions = [];
+        let scores = {};
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            setupKeyboardShortcuts();
+            setupAutoSave();
+        });
+
+        // 键盘快捷键
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key) {
+                        case 'Enter':
+                            e.preventDefault();
+                            saveCurrent();
+                            break;
+                        case 'n':
+                            e.preventDefault();
+                            nextStudent();
+                            break;
+                        case 'p':
+                            e.preventDefault();
+                            previousStudent();
+                            break;
+                    }
+                } else if (e.key === 'Escape') {
+                    document.getElementById('keyboardHints').style.display = 'none';
+                }
+            });
+        }
+
+        // 自动保存
+        function setupAutoSave() {
+            setInterval(() => {
+                if (students.length > 0) {
+                    saveProgress(false);
+                }
+            }, 30000); // 每30秒自动保存
+        }
+
+        // 切换键盘快捷键提示
+        function toggleKeyboardHints() {
+            const hints = document.getElementById('keyboardHints');
+            hints.style.display = hints.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // 加载学生
+        function loadStudents() {
+            const sessionId = document.getElementById('examSessionSelect').value;
+            const grade = document.getElementById('gradeSelect').value;
+            
+            if (!sessionId) {
+                document.getElementById('scoreEntryArea').style.display = 'none';
+                document.getElementById('emptyState').style.display = 'block';
+                return;
+            }
+
+            // 模拟加载数据
+            fetch(`/api/students/${sessionId}?grade=${grade}`)
+                .then(response => response.json())
+                .then(data => {
+                    students = data.students;
+                    questions = data.questions;
+                    
+                    if (students.length > 0) {
+                        document.getElementById('scoreEntryArea').style.display = 'block';
+                        document.getElementById('emptyState').style.display = 'none';
+                        document.getElementById('progressIndicator').style.display = 'block';
+                        
+                        loadStudent(0);
+                        updateProgress();
+                    } else {
+                        alert('没有找到符合条件的学生');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('加载学生失败');
+                });
+        }
+
+        // 加载学生信息
+        function loadStudent(index) {
+            if (index < 0 || index >= students.length) return;
+            
+            currentStudentIndex = index;
+            const student = students[index];
+            
+            // 更新学生信息
+            document.getElementById('studentName').textContent = student.name;
+            document.getElementById('studentId').textContent = student.student_id;
+            document.getElementById('studentGrade').textContent = student.grade_level;
+            document.getElementById('studentSchool').textContent = student.school_name;
+            document.getElementById('examSubject').textContent = student.subject_name;
+            document.getElementById('questionCount').textContent = questions.length;
+            
+            // 显示学生信息
+            document.getElementById('studentInfo').style.display = 'block';
+            
+            // 更新导航按钮状态
+            document.getElementById('prevBtn').disabled = index === 0;
+            document.getElementById('nextBtn').disabled = index === students.length - 1;
+            
+            // 更新计数器
+            document.getElementById('studentCounter').textContent = `${index + 1} / ${students.length}`;
+            
+            // 加载题目和分数
+            loadQuestions(student.id);
+        }
+
+        // 加载题目
+        function loadQuestions(studentId) {
+            const grid = document.getElementById('questionsGrid');
+            grid.innerHTML = '';
+            
+            questions.forEach((question, index) => {
+                const card = document.createElement('div');
+                card.className = 'card question-card';
+                card.innerHTML = `
+                    <div class="card-body">
+                        <h6 class="card-title">
+                            ${question.question_number} - ${question.module}
+                            <span class="badge bg-secondary float-end">${question.score}分</span>
+                        </h6>
+                        <p class="card-text small text-muted">${question.knowledge_point}</p>
+                        <div class="mb-2">
+                            <input type="number" 
+                                   class="form-control score-input" 
+                                   id="score_${question.id}"
+                                   min="0" 
+                                   max="${question.score}"
+                                   step="0.5"
+                                   placeholder="输入得分"
+                                   onchange="updateScore(${question.id}, this.value)">
+                        </div>
+                        <div class="quick-score-buttons">
+                            <button class="btn btn-sm btn-outline-secondary quick-score-btn" 
+                                    onclick="setScore(${question.id}, 0)">0</button>
+                            <button class="btn btn-sm btn-outline-warning quick-score-btn" 
+                                    onclick="setScore(${question.id}, ${question.score * 0.5})">${question.score * 0.5}</button>
+                            <button class="btn btn-sm btn-success quick-score-btn" 
+                                    onclick="setScore(${question.id}, ${question.score})">${question.score}</button>
+                            <button class="btn btn-sm btn-info quick-score-btn" 
+                                    onclick="setCorrect(${question.id}, true)">正确</button>
+                            <button class="btn btn-sm btn-danger quick-score-btn" 
+                                    onclick="setCorrect(${question.id}, false)">错误</button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            
+            // 恢复之前输入的分数
+            restoreScores(studentId);
+            
+            // 聚焦第一个输入框
+            setTimeout(() => {
+                const firstInput = grid.querySelector('.score-input');
+                if (firstInput) firstInput.focus();
+            }, 100);
+        }
+
+        // 设置分数
+        function setScore(questionId, score) {
+            const input = document.getElementById(`score_${questionId}`);
+            if (input) {
+                input.value = score;
+                updateScore(questionId, score);
+            }
+        }
+
+        // 设置正确/错误
+        function setCorrect(questionId, isCorrect) {
+            const question = questions.find(q => q.id === questionId);
+            if (question) {
+                const score = isCorrect ? question.score : 0;
+                setScore(questionId, score);
+            }
+        }
+
+        // 更新分数
+        function updateScore(questionId, score) {
+            if (!scores[currentStudentIndex]) {
+                scores[currentStudentIndex] = {};
+            }
+            scores[currentStudentIndex][questionId] = parseFloat(score) || 0;
+            updateProgress();
+        }
+
+        // 恢复分数
+        function restoreScores(studentId) {
+            const studentScores = scores[currentStudentIndex] || {};
+            Object.keys(studentScores).forEach(questionId => {
+                const input = document.getElementById(`score_${questionId}`);
+                if (input) {
+                    input.value = studentScores[questionId];
+                }
+            });
+        }
+
+        // 上一个学生
+        function previousStudent() {
+            if (currentStudentIndex > 0) {
+                loadStudent(currentStudentIndex - 1);
+            }
+        }
+
+        // 下一个学生
+        function nextStudent() {
+            if (currentStudentIndex < students.length - 1) {
+                loadStudent(currentStudentIndex + 1);
+            }
+        }
+
+        // 清空当前
+        function clearCurrent() {
+            if (confirm('确定要清空当前学生的所有分数吗？')) {
+                document.querySelectorAll('.score-input').forEach(input => {
+                    input.value = '';
+                });
+                scores[currentStudentIndex] = {};
+                updateProgress();
+            }
+        }
+
+        // 保存当前
+        function saveCurrent() {
+            const studentId = students[currentStudentIndex].id;
+            const studentScores = scores[currentStudentIndex] || {};
+            
+            // 验证分数完整性
+            const totalQuestions = questions.length;
+            const answeredQuestions = Object.keys(studentScores).length;
+            
+            if (answeredQuestions < totalQuestions) {
+                if (!confirm(`还有 ${totalQuestions - answeredQuestions} 道题目未评分，确定要保存吗？`)) {
+                    return;
+                }
+            }
+            
+            // 提交到服务器
+            fetch('/api/scores/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    student_id: studentId,
+                    scores: studentScores
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('保存成功！');
+                } else {
+                    alert('保存失败：' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('保存失败');
+            });
+        }
+
+        // 保存并下一个
+        function saveAndNext() {
+            saveCurrent();
+            setTimeout(() => {
+                if (currentStudentIndex < students.length - 1) {
+                    nextStudent();
+                } else {
+                    alert('已经是最后一个学生了！');
+                }
+            }, 500);
+        }
+
+        // 保存进度
+        function saveProgress(showAlert = true) {
+            // 保存到本地存储
+            localStorage.setItem('scoreEntryProgress', JSON.stringify({
+                students: students,
+                questions: questions,
+                scores: scores,
+                currentStudentIndex: currentStudentIndex,
+                timestamp: new Date().toISOString()
+            }));
+            
+            if (showAlert) {
+                alert('进度已保存到本地');
+            }
+        }
+
+        // 提交全部
+        function submitAll() {
+            if (confirm('确定要提交所有学生的成绩吗？请确认数据完整性。')) {
+                // 收集所有分数数据
+                const allScores = [];
+                students.forEach((student, index) => {
+                    const studentScores = scores[index] || {};
+                    allScores.push({
+                        student_id: student.id,
+                        scores: studentScores
+                    });
+                });
+                
+                fetch('/api/scores/batch-save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        scores: allScores
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('全部成绩提交成功！');
+                        localStorage.removeItem('scoreEntryProgress');
+                        location.reload();
+                    } else {
+                        alert('提交失败：' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('提交失败');
+                });
+            }
+        }
+
+        // 更新进度
+        function updateProgress() {
+            if (students.length === 0) return;
+            
+            let completedStudents = 0;
+            students.forEach((student, index) => {
+                const studentScores = scores[index] || {};
+                if (Object.keys(studentScores).length === questions.length) {
+                    completedStudents++;
+                }
+            });
+            
+            const percentage = (completedStudents / students.length) * 100;
+            document.getElementById('progressBar').style.width = percentage + '%';
+            document.getElementById('completedCount').textContent = completedStudents;
+            document.getElementById('totalCount').textContent = students.length;
+        }
+
+        // 搜索学生
+        function searchStudent() {
+            const searchTerm = document.getElementById('studentSearch').value.toLowerCase();
+            if (searchTerm.length < 2) return;
+            
+            const foundIndex = students.findIndex(student => 
+                student.name.toLowerCase().includes(searchTerm) ||
+                student.student_id.toLowerCase().includes(searchTerm)
+            );
+            
+            if (foundIndex !== -1) {
+                loadStudent(foundIndex);
+            } else {
+                alert('未找到匹配的学生');
+            }
+        }
+
+        // 恢复进度
+        window.addEventListener('load', function() {
+            const savedProgress = localStorage.getItem('scoreEntryProgress');
+            if (savedProgress) {
+                const data = JSON.parse(savedProgress);
+                const timeDiff = new Date() - new Date(data.timestamp);
+                
+                // 如果是24小时内的数据，询问是否恢复
+                if (timeDiff < 24 * 60 * 60 * 1000) {
+                    if (confirm('检测到未完成的评分进度，是否恢复？')) {
+                        students = data.students;
+                        questions = data.questions;
+                        scores = data.scores;
+                        currentStudentIndex = data.currentStudentIndex || 0;
+                        
+                        document.getElementById('scoreEntryArea').style.display = 'block';
+                        document.getElementById('emptyState').style.display = 'none';
+                        document.getElementById('progressIndicator').style.display = 'block';
+                        
+                        loadStudent(currentStudentIndex);
+                        updateProgress();
+                    }
+                }
+            }
+        });
+
+        // 导入成绩
+        function importScores() {
+            // Get current session
+            const sessionSelect = document.getElementById('examSessionSelect');
+            
+            // Fetch sessions if not selected or for dropdown in modal
+            let options = '';
+            for(let i=1; i<sessionSelect.options.length; i++) { // Skip first "Please select"
+                const opt = sessionSelect.options[i];
+                options += `<option value="${opt.value}">${opt.text}</option>`;
+            }
+            
+            // SweetAlert
+            Swal.fire({
+                title: '导入成绩',
+                html: `
+                    <div class="mb-3 text-start">
+                        <label class="form-label">选择Excel文件</label>
+                        <input type="file" id="importFile" class="form-control" accept=".xlsx, .xls">
+                    </div>
+                    <div class="mb-3 text-start">
+                        <label class="form-label">选择考试场次</label>
+                        <select id="importSession" class="form-select">
+                            <option value="">-- 请选择 --</option>
+                            ${options}
+                        </select>
+                    </div>
+                    <div class="text-start small text-muted">
+                        <p>Excel格式要求：</p>
+                        <ul>
+                            <li>必须包含 <b>学号</b> 或 <b>student_id</b> 列</li>
+                            <li>题目列名为题号 (如: Q1, Q2, 1, 2)</li>
+                            <li>推荐先从"统计报表"页面导出模板</li>
+                        </ul>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '开始导入',
+                showLoaderOnConfirm: true,
+                preConfirm: () => {
+                    const fileInput = document.getElementById('importFile');
+                    const sessionId = document.getElementById('importSession').value;
+                    
+                    if (fileInput.files.length === 0) {
+                        Swal.showValidationMessage('请选择文件');
+                        return false;
+                    }
+                    if (!sessionId) {
+                        Swal.showValidationMessage('请选择考试场次');
+                        return false;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    formData.append('session_id', sessionId);
+                    
+                    return fetch('/api/scores/import', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(err => { throw new Error(err.message || response.statusText) });
+                        }
+                        return response.json()
+                    })
+                    .catch(error => {
+                        Swal.showValidationMessage(
+                            `请求失败: ${error}`
+                        )
+                    })
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if (result.value.success) {
+                        Swal.fire('成功', result.value.message, 'success').then(() => {
+                            // If current session matches, reload students
+                            if (sessionSelect.value == document.getElementById('importSession').value) {
+                                loadStudents();
+                            }
+                        });
+                    } else {
+                        Swal.fire('错误', result.value.message, 'error');
+                    }
+                }
+            })
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</body>
+</html>

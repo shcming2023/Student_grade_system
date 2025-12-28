@@ -241,7 +241,9 @@ def create_tables():
 
 if __name__ == '__main__':
     # 确保数据库目录存在
-    os.makedirs(os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')), exist_ok=True)
+    db_path = 'student_system.db'
+    if os.path.dirname(db_path):
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
     
     # 运行应用
     app.run(host='0.0.0.0', port=5000, debug=True)

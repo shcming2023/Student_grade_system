@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>题目模板管理 - 橡心国际WTF活动管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="bi bi-mortarboard-fill me-2"></i>橡心国际WTF平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="bi bi-speedometer2"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_sessions') }}">
+                            <i class="bi bi-calendar-event"></i> 考试场次
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('question_templates') }}">
+                            <i class="bi bi-file-earmark-text"></i> 题目模板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('students') }}">
+                            <i class="bi bi-people"></i> 学生管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('score_entry') }}">
+                            <i class="bi bi-pencil-square"></i> 评分录入
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>
+                        <i class="bi bi-file-earmark-text-fill text-primary me-2"></i>
+                        题目模板管理
+                    </h2>
+                    <div>
+                        <button class="btn btn-outline-primary" onclick="refreshTemplates()">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新
+                        </button>
+                        <button class="btn btn-success" onclick="initializeTemplates()">
+                            <i class="bi bi-database-add"></i> 初始化G1-G6模板
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 年级筛选 -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <label class="form-label">年级筛选:</label>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-outline-primary" onclick="filterByGrade('all')">全部</button>
+                                    <button type="button" class="btn btn-outline-primary" onclick="filterByGrade('G1')">G1</button>
+                                    <button type="button" class="btn btn-outline-primary" onclick="filterByGrade('G2')">G2</button>
+                                    <button type="button" class="btn btn-outline-primary" onclick="filterByGrade('G3')">G3</button>
+                                    <button type="button" class="btn btn-outline-primary" onclick="filterByGrade('G4')">G4</button>
+                                    <button type="button" class="btn btn-outline-primary" onclick="filterByGrade('G5')">G5</button>
+                                    <button type="button" class="btn btn-outline-primary" onclick="filterByGrade('G6')">G6</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模板列表 -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-list-ul me-2"></i>
+                            题目模板列表
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="templatesTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>年级</th>
+                                        <th>科目</th>
+                                        <th>模板名称</th>
+                                        <th>题目数量</th>
+                                        <th>科目类型</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for template, subject in templates %}
+                                    <tr data-grade="{{ template.grade_level }}">
+                                        <td>
+                                            <span class="badge bg-info">{{ template.grade_level }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-secondary">{{ subject.name }}</span>
+                                        </td>
+                                        <td>{{ template.name }}</td>
+                                        <td>
+                                            <span class="badge bg-success">{{ template.total_questions }}题</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-warning text-dark">{{ subject.type }}</span>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-primary" onclick="viewQuestions({{ template.id }})">
+                                                    <i class="bi bi-eye"></i> 查看题目
+                                                </button>
+                                                <button class="btn btn-outline-info" onclick="editTemplate({{ template.id }})">
+                                                    <i class="bi bi-pencil"></i> 编辑
+                                                </button>
+                                                <button class="btn btn-outline-success" onclick="exportTemplate({{ template.id }})">
+                                                    <i class="bi bi-download"></i> 导出
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 题目详情模态框 -->
+                <div class="modal fade" id="questionsModal" tabindex="-1">
+                    <div class="modal-dialog modal-xl">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">题目详情</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="questionsList">
+                                    <!-- 题目列表将通过JavaScript动态加载 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 筛选年级
+        function filterByGrade(grade) {
+            const rows = document.querySelectorAll('#templatesTable tbody tr');
+            
+            rows.forEach(row => {
+                if (grade === 'all') {
+                    row.style.display = '';
+                } else {
+                    const rowGrade = row.getAttribute('data-grade');
+                    row.style.display = rowGrade === grade ? '' : 'none';
+                }
+            });
+            
+            // 更新按钮状态
+            document.querySelectorAll('.btn-group button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // 查看题目
+        function viewQuestions(templateId) {
+            fetch(`/api/questions/${templateId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const questionsList = document.getElementById('questionsList');
+                    questionsList.innerHTML = '';
+                    
+                    if (data.error) {
+                        questionsList.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    let html = '<div class="table-responsive"><table class="table table-striped">';
+                    html += '<thead><tr><th>题号</th><th>模块</th><th>知识点</th><th>分值</th></tr></thead><tbody>';
+                    
+                    data.forEach(question => {
+                        html += `<tr>
+                            <td>${question.question_number}</td>
+                            <td>${question.module}</td>
+                            <td>${question.knowledge_point}</td>
+                            <td>${question.score}分</td>
+                        </tr>`;
+                    });
+                    
+                    html += '</tbody></table></div>';
+                    questionsList.innerHTML = html;
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('questionsModal'));
+                    modal.show();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('加载题目失败');
+                });
+        }
+
+        // 编辑模板
+        function editTemplate(templateId) {
+            alert('编辑功能开发中...');
+        }
+
+        // 导出模板
+        function exportTemplate(templateId) {
+            alert('导出功能开发中...');
+        }
+
+        // 刷新模板
+        function refreshTemplates() {
+            location.reload();
+        }
+
+        // 初始化G1-G6模板
+        function initializeTemplates() {
+            if (confirm('确定要重新初始化G1-G6题目模板吗？这将覆盖现有数据。')) {
+                fetch('/api/init-templates', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('模板初始化成功！');
+                            location.reload();
+                        } else {
+                            alert('模板初始化失败：' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('初始化失败');
+                    });
+            }
+        }
+    </script>
+</body>
+</html>

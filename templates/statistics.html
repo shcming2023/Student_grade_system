@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>统计报表 - 橡心国际WTF活动管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-graduation-cap me-2"></i>橡心国际WTF管理平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="fas fa-home"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-tachometer-alt"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_sessions') }}">
+                            <i class="fas fa-calendar-alt"></i> 考试管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_templates') }}">
+                            <i class="fas fa-file-signature"></i> 试卷管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('students') }}">
+                            <i class="fas fa-user-graduate"></i> 考生管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('report_cards') }}">
+                            <i class="fas fa-file-alt"></i> 成绩单
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('statistics') }}">
+                            <i class="fas fa-chart-bar"></i> 统计报表
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt"></i> 注销
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+            <h1 class="h2"><i class="fas fa-chart-bar me-2 text-wtf"></i>统计报表</h1>
+            <div class="btn-toolbar mb-2 mb-md-0">
+                <div class="btn-group me-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+                        <i class="fas fa-print"></i> 打印报表
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="exportBtn">
+                        <i class="fas fa-download"></i> 导出Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 筛选栏 -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">选择考试场次</h5>
+                        <select class="form-select" id="sessionSelect">
+                            <option value="">请选择考试...</option>
+                            {% for session in sessions %}
+                            <option value="{{ session.id }}">{{ session.name }} ({{ session.exam_date }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 报表内容区域 -->
+        <div id="reportContent" style="display: none;">
+            <!-- 概览卡片 -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card text-white bg-primary mb-3 shadow-sm">
+                        <div class="card-header">参考人数</div>
+                        <div class="card-body">
+                            <h2 class="card-title" id="totalStudents">-</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-success mb-3 shadow-sm">
+                        <div class="card-header">平均分</div>
+                        <div class="card-body">
+                            <h2 class="card-title" id="avgScore">-</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-info mb-3 shadow-sm">
+                        <div class="card-header">及格率 (≥60%)</div>
+                        <div class="card-body">
+                            <h2 class="card-title" id="passRate">-</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-warning mb-3 shadow-sm">
+                        <div class="card-header">最高分</div>
+                        <div class="card-body">
+                            <h2 class="card-title" id="maxScore">-</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- 分数分布图 -->
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header">
+                            <i class="fas fa-chart-bar"></i> 分数段分布
+                        </div>
+                        <div class="card-body">
+                            <canvas id="distributionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 题目正确率分析 -->
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header">
+                            <i class="fas fa-chart-line"></i> 题目得分率分析
+                        </div>
+                        <div class="card-body">
+                            <canvas id="questionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 详细数据表格 -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header">
+                    <i class="fas fa-table"></i> 题目详情数据
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="questionTable">
+                            <thead>
+                                <tr>
+                                    <th>题号</th>
+                                    <th>模块</th>
+                                    <th>平均得分</th>
+                                    <th>正确率</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- 动态填充 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 空状态提示 -->
+        <div id="emptyState" class="text-center py-5">
+            <div class="text-muted">
+                <i class="fas fa-chart-pie fa-4x mb-3"></i>
+                <p class="lead">请在上方选择一个考试场次以查看统计报表</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入 Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const sessionSelect = document.getElementById('sessionSelect');
+        const reportContent = document.getElementById('reportContent');
+        const emptyState = document.getElementById('emptyState');
+        
+        // Export Button Logic
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            const sessionId = sessionSelect.value;
+            if (sessionId) {
+                window.location.href = `/api/stats/export/${sessionId}`;
+            } else {
+                alert('请先选择考试场次');
+            }
+        });
+        
+        let distChart = null;
+        let questChart = null;
+
+        sessionSelect.addEventListener('change', function() {
+            const sessionId = this.value;
+            if (sessionId) {
+                loadStatistics(sessionId);
+            } else {
+                reportContent.style.display = 'none';
+                emptyState.style.display = 'block';
+            }
+        });
+
+        async function loadStatistics(sessionId) {
+            try {
+                const response = await fetch(`/api/stats/session/${sessionId}`);
+                const data = await response.json();
+                
+                // 更新概览
+                document.getElementById('totalStudents').textContent = data.overview.total_students;
+                document.getElementById('avgScore').textContent = data.overview.avg_score;
+                document.getElementById('passRate').textContent = data.overview.pass_rate + '%';
+                document.getElementById('maxScore').textContent = data.overview.max_score;
+                
+                // 渲染图表
+                renderDistributionChart(data.distribution);
+                renderQuestionChart(data.question_stats);
+                
+                // 渲染表格
+                renderQuestionTable(data.question_stats);
+                
+                reportContent.style.display = 'block';
+                emptyState.style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                alert('加载统计数据失败');
+            }
+        }
+
+        function renderDistributionChart(data) {
+            const ctx = document.getElementById('distributionChart').getContext('2d');
+            
+            if (distChart) distChart.destroy();
+            
+            distChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['90-100', '80-89', '70-79', '60-69', '<60'],
+                    datasets: [{
+                        label: '人数',
+                        data: [
+                            data['90-100'],
+                            data['80-89'],
+                            data['70-79'],
+                            data['60-69'],
+                            data['<60']
+                        ],
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.6)',
+                            'rgba(54, 162, 235, 0.6)',
+                            'rgba(255, 206, 86, 0.6)',
+                            'rgba(255, 159, 64, 0.6)',
+                            'rgba(255, 99, 132, 0.6)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderQuestionChart(stats) {
+            const ctx = document.getElementById('questionChart').getContext('2d');
+            
+            if (questChart) questChart.destroy();
+            
+            const labels = stats.map(s => s.number);
+            const accuracies = stats.map(s => s.accuracy);
+            
+            questChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '正确率 (%)',
+                        data: accuracies,
+                        borderColor: 'rgba(153, 102, 255, 1)',
+                        backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderQuestionTable(stats) {
+            const tbody = document.querySelector('#questionTable tbody');
+            tbody.innerHTML = '';
+            
+            stats.forEach(s => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${s.number}</td>
+                    <td>${s.module || '-'}</td>
+                    <td>${s.avg_score}</td>
+                    <td>
+                        <div class="progress">
+                            <div class="progress-bar bg-${s.accuracy >= 60 ? 'success' : 'danger'}" 
+                                 role="progressbar" 
+                                 style="width: ${s.accuracy}%" 
+                                 aria-valuenow="${s.accuracy}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                                ${s.accuracy}%
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    });
+    </script>
+</body>
+</html>

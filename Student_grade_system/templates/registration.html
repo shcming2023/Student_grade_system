@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>报考管理 - 橡心国际WTF</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+    <style>
+        /* Mobile Optimizations */
+        @media (max-width: 768px) {
+            .mobile-exam-card {
+                transition: transform 0.2s;
+                cursor: pointer;
+                border-left: 5px solid #0d6efd;
+            }
+            .mobile-exam-card:active {
+                transform: scale(0.98);
+                background-color: #f8f9fa;
+            }
+            .student-select-item {
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                padding: 10px;
+                margin-bottom: 8px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+            }
+            .student-select-item.selected {
+                background-color: #e8f4fc;
+                border-color: #0d6efd;
+            }
+            .floating-action-bar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                background: white;
+                padding: 15px;
+                box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+                z-index: 1000;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            /* Hide Desktop Elements */
+            .desktop-only {
+                display: none !important;
+            }
+        }
+        @media (min-width: 769px) {
+            .mobile-only {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-graduation-cap me-2"></i>橡心国际WTF管理平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="fas fa-home"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-tachometer-alt"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_sessions') }}">
+                            <i class="fas fa-calendar-alt"></i> 考试管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_templates') }}">
+                            <i class="fas fa-file-signature"></i> 试卷管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('students') }}">
+                            <i class="fas fa-user-graduate"></i> 考生管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('registration') }}">
+                            <i class="fas fa-clipboard-check"></i> 报考管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('score_entry_dashboard') }}">
+                            <i class="fas fa-edit"></i> 评分录入
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('report_cards') }}">
+                            <i class="fas fa-file-alt"></i> 成绩单
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('statistics') }}">
+                            <i class="fas fa-chart-bar"></i> 统计报表
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt"></i> 注销
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2><i class="fas fa-clipboard-check me-2 text-wtf"></i>报考管理</h2>
+            </div>
+        </div>
+
+        <!-- ================= Desktop View ================= -->
+        <div class="row desktop-only">
+            <!-- 左侧选择区 -->
+            <div class="col-md-4">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">选择试卷</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">考试场次</label>
+                            <select class="form-select" id="sessionSelect" onchange="loadTemplates()">
+                                <option value="">-- 请选择 --</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">试卷模板</label>
+                            <select class="form-select" id="templateSelect" onchange="loadData()" disabled>
+                                <option value="">-- 请先选择考试 --</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-info small" id="templateInfo" style="display:none;">
+                            <strong>年级:</strong> <span id="infoGrade"></span><br>
+                            <strong>科目:</strong> <span id="infoSubject"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧操作区 -->
+            <div class="col-md-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <ul class="nav nav-tabs card-header-tabs" id="myTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="registered-tab" data-bs-toggle="tab" data-bs-target="#registered" type="button" role="tab">已报名名单</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="available-tab" data-bs-toggle="tab" data-bs-target="#available" type="button" role="tab">添加报名</button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content" id="myTabContent">
+                            <!-- 已报名名单 -->
+                            <div class="tab-pane fade show active" id="registered" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5 class="mb-0">已报名学生 <span class="badge bg-primary" id="regCount">0</span></h5>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="batchUnregister()">
+                                        <i class="fas fa-trash"></i> 批量取消
+                                    </button>
+                                </div>
+                                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th><input type="checkbox" id="checkAllReg" onclick="toggleAll('checkAllReg', 'regCheck')"></th>
+                                                <th>学号</th>
+                                                <th>姓名</th>
+                                                <th>年级</th>
+                                                <th>班级</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="registeredBody">
+                                            <tr><td colspan="6" class="text-center text-muted">请先选择试卷</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- 添加报名 -->
+                            <div class="tab-pane fade" id="available" role="tabpanel">
+                                <div class="row mb-3 align-items-end">
+                                    <div class="col-md-4">
+                                        <label class="form-label small">年级筛选</label>
+                                        <select class="form-select form-select-sm" id="gradeFilter" onchange="loadAvailableStudents()">
+                                            <option value="">全部</option>
+                                            <option value="G1">G1</option>
+                                            <option value="G2">G2</option>
+                                            <option value="G3">G3</option>
+                                            <option value="G4">G4</option>
+                                            <option value="G5">G5</option>
+                                            <option value="G6">G6</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-8 text-end">
+                                        <button class="btn btn-success" onclick="batchRegister()">
+                                            <i class="fas fa-plus"></i> 批量报名选中学生
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th><input type="checkbox" id="checkAllAvail" onclick="toggleAll('checkAllAvail', 'availCheck')"></th>
+                                                <th>学号</th>
+                                                <th>姓名</th>
+                                                <th>年级</th>
+                                                <th>班级</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="availableBody">
+                                            <tr><td colspan="5" class="text-center text-muted">请先选择试卷</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= Mobile View ================= -->
+        <div class="mobile-only">
+            
+            <!-- 1. Exam List View -->
+            <div id="mobile-view-exams">
+                <p class="text-muted small mb-2">请选择要操作的试卷：</p>
+                <div id="mobileExamListLoader" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+                <div id="mobileExamList"></div>
+            </div>
+
+            <!-- 2. Exam Detail View (Actions) -->
+            <div id="mobile-view-actions" style="display:none;">
+                <div class="mb-3">
+                    <button class="btn btn-link p-0 text-decoration-none" onclick="showMobileView('exams')">
+                        <i class="fas fa-arrow-left"></i> 返回列表
+                    </button>
+                </div>
+                <h4 id="mobileSelectedExamTitle" class="mb-1"></h4>
+                <p class="text-muted small mb-4" id="mobileSelectedExamInfo"></p>
+
+                <div class="card mb-3 shadow-sm" onclick="showMobileView('registered')">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1 text-primary"><i class="fas fa-users me-2"></i>已报名名单</h5>
+                            <span class="text-muted small">查看及管理已报名学生</span>
+                        </div>
+                        <i class="fas fa-chevron-right text-muted"></i>
+                    </div>
+                </div>
+
+                <div class="card mb-3 shadow-sm" onclick="showMobileView('add')">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1 text-success"><i class="fas fa-user-plus me-2"></i>添加报名</h5>
+                            <span class="text-muted small">快速添加新学生</span>
+                        </div>
+                        <i class="fas fa-chevron-right text-muted"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Registered List View -->
+            <div id="mobile-view-registered" style="display:none;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button class="btn btn-link p-0 text-decoration-none" onclick="showMobileView('actions')">
+                        <i class="fas fa-arrow-left"></i> 返回
+                    </button>
+                    <span class="badge bg-primary" id="mobileRegCount">0人</span>
+                </div>
+                <h5 class="mb-3">已报名学生</h5>
+                <div id="mobileRegisteredList">
+                    <!-- List Items -->
+                </div>
+            </div>
+
+            <!-- 4. Add Registration View (Form) -->
+            <div id="mobile-view-add" style="display:none; padding-bottom: 20px;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button class="btn btn-link p-0 text-decoration-none" onclick="showMobileView('actions')">
+                        <i class="fas fa-arrow-left"></i> 返回
+                    </button>
+                </div>
+                <h5 class="mb-3">报考录入</h5>
+                
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <form id="mobileQuickRegForm">
+                            <div class="mb-3">
+                                <label class="form-label">姓名 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="m_name" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">性别 <span class="text-danger">*</span></label>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="m_gender" id="m_gender_m" value="M" checked>
+                                    <label class="btn btn-outline-primary" for="m_gender_m">男</label>
+
+                                    <input type="radio" class="btn-check" name="m_gender" id="m_gender_f" value="F">
+                                    <label class="btn btn-outline-danger" for="m_gender_f">女</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">年级 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="m_grade" required>
+                                    <option value="">-- 请选择 --</option>
+                                    <option value="GK">GK</option>
+                                    <option value="G1">G1</option>
+                                    <option value="G2">G2</option>
+                                    <option value="G3">G3</option>
+                                    <option value="G4">G4</option>
+                                    <option value="G5">G5</option>
+                                    <option value="G6">G6</option>
+                                    <option value="G7">G7</option>
+                                    <option value="G8">G8</option>
+                                    <option value="G9">G9</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">学校 <span class="text-danger">*</span></label>
+                                <input class="form-control" list="schoolOptionsMobile" id="m_school" required placeholder="选择或输入学校">
+                                <datalist id="schoolOptionsMobile">
+                                    <!-- Populated by JS -->
+                                </datalist>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">报考科目 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="m_template_id" required onchange="updateMobileSessionInfo()">
+                                    <!-- Populated by JS -->
+                                </select>
+                                <div class="form-text text-muted" id="m_session_info"></div>
+                            </div>
+
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="submit" class="btn btn-primary btn-lg">确认报名</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        let allTemplates = [];
+        let currentTemplateId = null;
+        let mobileAvailableData = []; // Store for filtering
+        let mobileSelectedIds = new Set();
+        let allSchools = []; // Cache schools for datalist
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if mobile
+            if (window.innerWidth <= 768) {
+                loadMobileExams();
+                loadSchools(); // Preload schools
+            } else {
+                loadSessions();
+            }
+        });
+
+        function loadSchools() {
+             fetch('/api/schools')
+             .then(res => res.json())
+             .then(data => {
+                 allSchools = data;
+                 const datalist = document.getElementById('schoolOptionsMobile');
+                 datalist.innerHTML = '';
+                 data.forEach(s => {
+                     datalist.innerHTML += `<option value="${s.name}">`;
+                 });
+             })
+             .catch(err => console.error('Error loading schools:', err));
+        }
+
+        // ... (Desktop Logic Omitted for Brevity) ...
+        // ================= Desktop Logic (Existing) =================
+        function loadSessions() {
+            fetch('/api/exam-sessions')
+            .then(res => res.json())
+            .then(data => {
+                const select = document.getElementById('sessionSelect');
+                if(!select) return; // Mobile check
+                select.innerHTML = '<option value="">-- 请选择 --</option>';
+                data.sessions.forEach(s => {
+                    select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+                });
+            });
+        }
+
+        function loadTemplates() {
+            const sessionId = document.getElementById('sessionSelect').value;
+            const templateSelect = document.getElementById('templateSelect');
+            
+            if (!sessionId) {
+                templateSelect.innerHTML = '<option value="">-- 请先选择考试 --</option>';
+                templateSelect.disabled = true;
+                return;
+            }
+
+            fetch('/api/exam_templates')
+            .then(res => res.json())
+            .then(templates => {
+                allTemplates = templates; // Store for info lookup
+                const filtered = templates.filter(t => t.exam_session_id == sessionId);
+                
+                templateSelect.innerHTML = '<option value="">-- 请选择试卷 --</option>';
+                filtered.forEach(t => {
+                    templateSelect.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+                });
+                templateSelect.disabled = false;
+            });
+        }
+
+        function loadData() {
+            const templateId = document.getElementById('templateSelect').value;
+            if (!templateId) return;
+
+            // Update Info
+            const template = allTemplates.find(t => t.id == templateId);
+            if (template) {
+                document.getElementById('infoGrade').textContent = template.grade_level;
+                document.getElementById('infoSubject').textContent = template.subject_name;
+                document.getElementById('templateInfo').style.display = 'block';
+                
+                // Auto-set grade filter
+                if (template.grade_level !== 'Mixed' && template.grade_level !== 'ALL') {
+                    document.getElementById('gradeFilter').value = template.grade_level;
+                } else {
+                    document.getElementById('gradeFilter').value = '';
+                }
+            }
+
+            loadRegistered();
+            loadAvailableStudents();
+        }
+
+        function loadRegistered() {
+            const templateId = document.getElementById('templateSelect').value;
+            const tbody = document.getElementById('registeredBody');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">加载中...</td></tr>';
+
+            fetch(`/api/registrations?template_id=${templateId}`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('regCount').textContent = data.length;
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">暂无报名学生</td></tr>';
+                    return;
+                }
+                
+                data.forEach(r => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><input type="checkbox" class="regCheck form-check-input" value="${r.id}"></td>
+                            <td>${r.student_code}</td>
+                            <td>${r.student_name}</td>
+                            <td>${r.grade_level}</td>
+                            <td>${r.class_name || '-'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-link text-danger p-0" onclick="deleteRegistration(${r.id})">取消</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            });
+        }
+
+        function loadAvailableStudents() {
+            const templateId = document.getElementById('templateSelect').value;
+            const grade = document.getElementById('gradeFilter').value;
+            const tbody = document.getElementById('availableBody');
+            
+            if (!templateId) return;
+
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center">加载中...</td></tr>';
+
+            let url = `/api/students/available?template_id=${templateId}`;
+            if (grade) url += `&grade=${grade}`;
+
+            fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">没有符合条件的学生</td></tr>';
+                    return;
+                }
+                
+                data.forEach(s => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><input type="checkbox" class="availCheck form-check-input" value="${s.id}"></td>
+                            <td>${s.student_id}</td>
+                            <td>${s.name}</td>
+                            <td>${s.grade_level}</td>
+                            <td>${s.class_name || '-'}</td>
+                        </tr>
+                    `;
+                });
+            });
+        }
+
+        function toggleAll(masterId, childClass) {
+            const master = document.getElementById(masterId);
+            const children = document.getElementsByClassName(childClass);
+            for (let child of children) {
+                child.checked = master.checked;
+            }
+        }
+
+        function batchRegister() {
+            const templateId = document.getElementById('templateSelect').value;
+            const checks = document.getElementsByClassName('availCheck');
+            const ids = [];
+            for (let c of checks) {
+                if (c.checked) ids.push(c.value);
+            }
+
+            if (ids.length === 0) {
+                Swal.fire('提示', '请选择要报名的学生', 'warning');
+                return;
+            }
+
+            fetch('/api/registrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    template_id: templateId,
+                    student_ids: ids
+                })
+            })
+            .then(res => res.json())
+            .then(result => {
+                if (result.success) {
+                    Swal.fire('成功', result.message, 'success');
+                    loadData(); // Reload both lists
+                } else {
+                    Swal.fire('错误', result.message, 'error');
+                }
+            });
+        }
+
+        function deleteRegistration(id) {
+            if(!confirm('确定取消该学生的报名？')) return;
+            
+            fetch(`/api/registrations/${id}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(result => {
+                if (result.success) {
+                    // Check if mobile or desktop
+                    if(window.innerWidth <= 768) {
+                        loadMobileRegistered();
+                    } else {
+                        loadData();
+                    }
+                } else {
+                    Swal.fire('错误', result.message, 'error');
+                }
+            });
+        }
+        
+        function batchUnregister() {
+             const checks = document.getElementsByClassName('regCheck');
+             const ids = [];
+             for (let c of checks) {
+                 if (c.checked) ids.push(c.value);
+             }
+             
+             if (ids.length === 0) {
+                 Swal.fire('提示', '请选择要取消报名的学生', 'warning');
+                 return;
+             }
+             
+             if(!confirm(`确定取消 ${ids.length} 名学生的报名？`)) return;
+             
+             let errors = 0;
+             
+             Promise.all(ids.map(id => 
+                 fetch(`/api/registrations/${id}`, { method: 'DELETE' })
+                 .then(res => res.json())
+                 .then(r => { if(!r.success) errors++; })
+             )).then(() => {
+                 loadData();
+                 if(errors > 0) Swal.fire('提示', `部分取消失败 (${errors}个)`, 'warning');
+                 else Swal.fire('成功', '批量取消成功', 'success');
+             });
+        }
+
+        // ================= Mobile Logic (Optimized) =================
+        
+        function showMobileView(viewName) {
+            const views = ['exams', 'actions', 'registered', 'add'];
+            views.forEach(v => {
+                document.getElementById(`mobile-view-${v}`).style.display = (v === viewName) ? 'block' : 'none';
+            });
+            
+            if (viewName === 'registered') loadMobileRegistered();
+            if (viewName === 'add') setupMobileAddForm();
+        }
+
+        function loadMobileExams() {
+            fetch('/api/exam_templates')
+            .then(res => res.json())
+            .then(templates => {
+                allTemplates = templates;
+                const list = document.getElementById('mobileExamList');
+                document.getElementById('mobileExamListLoader').style.display = 'none';
+                
+                if (templates.length === 0) {
+                    list.innerHTML = '<p class="text-center text-muted">暂无试卷</p>';
+                    return;
+                }
+                
+                list.innerHTML = '';
+                
+                // Sort by Exam Date (Ascending) then Session Type (Morning first)
+                // session_date format: YYYY-MM-DD
+                // session_type: 'morning' or 'afternoon'
+                templates.sort((a, b) => {
+                    if (a.session_date !== b.session_date) {
+                        return a.session_date > b.session_date ? 1 : -1;
+                    }
+                    if (a.session_type !== b.session_type) {
+                        return a.session_type === 'morning' ? -1 : 1;
+                    }
+                    return 0;
+                });
+                
+                templates.forEach(t => {
+                    // Badge for Registration Count
+                    const count = t.reg_count || 0;
+                    
+                    list.innerHTML += `
+                        <div class="card mb-3 mobile-exam-card shadow-sm" onclick="selectMobileExam(${t.id})">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-0 text-truncate" style="max-width: 70%;">${t.name}</h5>
+                                    <span class="badge bg-info text-white rounded-pill">${count} 已报名</span>
+                                </div>
+                                <div class="text-muted small">
+                                    <i class="far fa-clock me-1"></i>${t.session_date} ${t.session_type_cn || ''} <br>
+                                    <i class="fas fa-book me-1"></i>${t.grade_level} | ${t.subject_name}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            });
+        }
+
+        function selectMobileExam(id) {
+            currentTemplateId = id;
+            const t = allTemplates.find(t => t.id == id);
+            if(t) {
+                document.getElementById('mobileSelectedExamTitle').textContent = t.name;
+                document.getElementById('mobileSelectedExamInfo').textContent = `${t.session_date} ${t.session_type_cn || ''}`;
+            }
+            showMobileView('actions');
+        }
+
+        function loadMobileRegistered() {
+            if(!currentTemplateId) return;
+            const list = document.getElementById('mobileRegisteredList');
+            list.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+            
+            fetch(`/api/registrations?template_id=${currentTemplateId}`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('mobileRegCount').textContent = data.length + '人';
+                list.innerHTML = '';
+                if(data.length === 0) {
+                    list.innerHTML = '<p class="text-center text-muted py-3">暂无报名</p>';
+                    return;
+                }
+                
+                data.forEach(r => {
+                    list.innerHTML += `
+                        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                            <div>
+                                <div class="fw-bold">${r.student_name}</div>
+                                <div class="small text-muted">${r.grade_level} | ${r.class_name || '-'}</div>
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteRegistration(${r.id})">取消</button>
+                        </div>
+                    `;
+                });
+            });
+        }
+
+        function setupMobileAddForm() {
+            // Populate Template Select
+            const select = document.getElementById('m_template_id');
+            select.innerHTML = '<option value="">-- 请选择 --</option>';
+            
+            // Reuse allTemplates, sorted
+            allTemplates.forEach(t => {
+                const selected = (currentTemplateId && t.id == currentTemplateId) ? 'selected' : '';
+                select.innerHTML += `<option value="${t.id}" ${selected}>${t.name} (${t.session_date} ${t.session_type_cn||''})</option>`;
+            });
+
+            if(currentTemplateId) {
+                 updateMobileSessionInfo();
+                 // Auto fill grade if specific
+                 const t = allTemplates.find(t => t.id == currentTemplateId);
+                 if (t && t.grade_level !== 'Mixed' && t.grade_level !== 'ALL') {
+                     document.getElementById('m_grade').value = t.grade_level;
+                 } else {
+                     document.getElementById('m_grade').value = '';
+                 }
+            } else {
+                document.getElementById('m_grade').value = '';
+            }
+            
+            // Reset other fields
+            document.getElementById('m_name').value = '';
+            document.getElementById('m_school').value = '';
+        }
+        
+        function updateMobileSessionInfo() {
+            const id = document.getElementById('m_template_id').value;
+            const t = allTemplates.find(t => t.id == id);
+            if(t) {
+                document.getElementById('m_session_info').textContent = `${t.session_date} ${t.session_type_cn || ''} | ${t.grade_level}`;
+                // Optional: Update grade if not set? No, user might want to override.
+            } else {
+                document.getElementById('m_session_info').textContent = '';
+            }
+        }
+        
+        // Handle Quick Register Form Submit
+        document.getElementById('mobileQuickRegForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const templateId = document.getElementById('m_template_id').value;
+            
+            const payload = {
+                name: document.getElementById('m_name').value,
+                gender: document.querySelector('input[name="m_gender"]:checked').value,
+                grade_level: document.getElementById('m_grade').value,
+                school_name: document.getElementById('m_school').value,
+                template_id: templateId
+            };
+            
+            const btn = this.querySelector('button[type="submit"]');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '提交中...';
+            
+            fetch('/api/students/quick-register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(result => {
+                btn.disabled = false;
+                btn.textContent = originalText;
+                
+                if (result.success) {
+                    Swal.fire({
+                        title: '成功',
+                        text: result.message,
+                        icon: 'success',
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => {
+                        // Clear form or stay? 
+                        // Maybe clear name only to allow continuous entry?
+                        document.getElementById('m_name').value = '';
+                        // document.getElementById('m_school').value = ''; // Keep school for convenience
+                        
+                        // Update exam list count in background? 
+                        // For now just stay. User can go back.
+                    });
+                } else {
+                    Swal.fire('错误', result.message, 'error');
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.textContent = originalText;
+                Swal.fire('错误', '网络错误，请重试', 'error');
+            });
+        });
+
+    </script>
+</body>
+</html>
+</body>
+</html>

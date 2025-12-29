@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仪表板 - 橡心国际WTF活动管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-graduation-cap me-2"></i>橡心国际WTF管理平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="fas fa-home"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-tachometer-alt"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_sessions') }}">
+                            <i class="fas fa-calendar-alt"></i> 考试管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_templates') }}">
+                            <i class="fas fa-file-signature"></i> 试卷管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('students') }}">
+                            <i class="fas fa-user-graduate"></i> 考生管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('registration') }}">
+                            <i class="fas fa-clipboard-check"></i> 报考管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('score_entry_dashboard') }}">
+                            <i class="fas fa-edit"></i> 评分录入
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('report_cards') }}">
+                            <i class="fas fa-file-alt"></i> 成绩单
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('statistics') }}">
+                            <i class="fas fa-chart-bar"></i> 统计报表
+                        </a>
+                    </li>
+                    {% if session.get('role') == 'admin' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('teachers_page') }}">
+                            <i class="fas fa-chalkboard-teacher"></i> 教师管理
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt"></i> 注销
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h2 class="mb-4"><i class="fas fa-tachometer-alt me-2"></i>仪表板</h2>
+        
+        <!-- 数据概览卡片 -->
+        <div class="row mb-4">
+            <div class="col-6 col-md-4 mb-3 mb-md-0">
+                <div class="card bg-primary text-white h-100">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-0 small-on-mobile">总考生数</h6>
+                                <h2 class="mt-2 mb-0 h4-on-mobile">{{ total_students }}</h2>
+                            </div>
+                            <i class="fas fa-user-graduate fa-3x opacity-50 d-none d-md-block"></i>
+                            <i class="fas fa-user-graduate fa-2x opacity-50 d-md-none"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 mb-3 mb-md-0">
+                <div class="card bg-success text-white h-100">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-0 small-on-mobile">考试场次</h6>
+                                <h2 class="mt-2 mb-0 h4-on-mobile">{{ total_exams }}</h2>
+                            </div>
+                            <i class="fas fa-calendar-check fa-3x opacity-50 d-none d-md-block"></i>
+                            <i class="fas fa-calendar-check fa-2x opacity-50 d-md-none"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card bg-info text-white h-100">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-0 small-on-mobile">报考总人次</h6>
+                                <h2 class="mt-2 mb-0 h4-on-mobile">{{ total_registrations }}</h2>
+                            </div>
+                            <i class="fas fa-clipboard-list fa-3x opacity-50 d-none d-md-block"></i>
+                            <i class="fas fa-clipboard-list fa-2x opacity-50 d-md-none"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <style>
+            @media (max-width: 768px) {
+                .small-on-mobile { font-size: 0.8rem; }
+                .h4-on-mobile { font-size: 1.5rem; }
+            }
+        </style>
+
+        <div class="row">
+            <!-- 最近考试 -->
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><i class="fas fa-clock me-2 text-primary"></i>最近考试</h5>
+                    </div>
+                    <div class="card-body p-0 p-md-3">
+                        {% if recent_exams %}
+                        <!-- Desktop Table -->
+                        <div class="table-responsive d-none d-md-block">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>考试名称</th>
+                                        <th>日期</th>
+                                        <th>类型</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for exam in recent_exams %}
+                                    <tr>
+                                        <td>{{ exam.name }}</td>
+                                        <td>{{ exam.exam_date.strftime('%Y-%m-%d') }}</td>
+                                        <td>
+                                            {% if exam.session_type == 'morning' %}
+                                            <span class="badge bg-warning text-dark">上午场</span>
+                                            {% else %}
+                                            <span class="badge bg-info text-dark">下午场</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if exam.status == 'completed' %}
+                                            <span class="badge bg-success">已结束</span>
+                                            {% elif exam.status == 'in_progress' %}
+                                            <span class="badge bg-primary">进行中</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">草稿</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Mobile List -->
+                        <div class="d-md-none">
+                            <ul class="list-group list-group-flush">
+                                {% for exam in recent_exams %}
+                                <li class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <div class="fw-bold text-truncate" style="max-width: 70%;">{{ exam.name }}</div>
+                                        <div>
+                                            {% if exam.status == 'completed' %}
+                                            <span class="badge bg-success">已结束</span>
+                                            {% elif exam.status == 'in_progress' %}
+                                            <span class="badge bg-primary">进行中</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">草稿</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted d-flex justify-content-between">
+                                        <span><i class="far fa-calendar me-1"></i>{{ exam.exam_date.strftime('%Y-%m-%d') }}</span>
+                                        <span>
+                                            {% if exam.session_type == 'morning' %}
+                                            <span class="badge bg-light text-dark border">上午场</span>
+                                            {% else %}
+                                            <span class="badge bg-light text-dark border">下午场</span>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+
+                        {% else %}
+                        <p class="text-muted text-center py-4">暂无考试记录</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 科目分布 -->
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><i class="fas fa-book me-2 text-primary"></i>开设科目</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for subject in subjects %}
+                            <span class="badge rounded-pill bg-light text-dark border">
+                                {{ subject.name }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 快捷操作 -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><i class="fas fa-bolt me-2 text-warning"></i>快捷操作</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('score_entry_dashboard') }}" class="btn btn-primary">
+                                进入评分 <i class="fas fa-arrow-right ms-1"></i>
+                            </a>
+                            <a href="{{ url_for('report_cards') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-file-alt me-2"></i>生成成绩单
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>考生列表 - 评分录入 - 橡心国际WTF活动管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-graduation-cap me-2"></i>橡心国际WTF管理平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-tachometer-alt"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('score_entry_dashboard') }}">
+                            <i class="fas fa-edit"></i> 评分录入
+                        </a>
+                    </li>
+                </ul>
+                <div class="d-flex align-items-center">
+                    <span class="text-light me-3">
+                        <i class="fas fa-user-circle"></i> {{ session.get('username', 'User') }}
+                    </span>
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">退出</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">首页</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('score_entry_dashboard') }}">评分录入</a></li>
+                <li class="breadcrumb-item active" aria-current="page" id="breadcrumb-active">考生列表</li>
+            </ol>
+        </nav>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0" id="page-title"><i class="fas fa-users text-primary me-2"></i>考生列表</h5>
+                    <a href="{{ url_for('score_entry_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> 返回
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="loading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">正在加载考生数据...</p>
+                </div>
+
+                <div id="error-message" class="alert alert-danger d-none"></div>
+
+                <div class="d-md-none" id="list-container">
+                    <div class="row g-3" id="students-list-body">
+                        <!-- 移动端考生数据将在这里渲染 -->
+                    </div>
+                </div>
+
+                <div class="table-responsive d-none d-md-block" id="table-container">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">考号</th>
+                                <th scope="col">姓名</th>
+                                <th scope="col">考试日期</th>
+                                <th scope="col">录入进度</th>
+                                <th scope="col">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="students-table-body">
+                            <!-- PC端考生数据将在这里渲染 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const templateName = urlParams.get('template_name');
+
+            if (!templateName) {
+                showError('未指定试卷模板');
+                return;
+            }
+
+            document.getElementById('breadcrumb-active').textContent = templateName;
+            document.getElementById('page-title').innerHTML = `<i class="fas fa-users text-primary me-2"></i>${templateName} - 考生列表`;
+
+            fetchStudents(templateName);
+        });
+
+        function fetchStudents(templateName) {
+            fetch(`/api/score-entry/students?template_name=${encodeURIComponent(templateName)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const loading = document.getElementById('loading');
+                    const listContainer = document.getElementById('list-container');
+                    const listBody = document.getElementById('students-list-body');
+                    const tableContainer = document.getElementById('table-container');
+                    const tableBody = document.getElementById('students-table-body');
+                    
+                    loading.classList.add('d-none');
+                    // Explicitly unhide PC container just in case d-none behavior is tricky with responsive classes
+                    // But 'd-none d-md-block' should handle it. 
+                    // Let's verify if data population works.
+                    
+                    if (data.length === 0) {
+                        const emptyHtml = '<div class="col-12"><div class="alert alert-info text-center">该模板暂无考生数据</div></div>';
+                        listBody.innerHTML = emptyHtml;
+                        tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">该模板暂无考生数据</td></tr>';
+                        return;
+                    }
+
+                    let listHtml = '';
+                    let tableHtml = '';
+                    
+                    data.forEach(student => {
+                        // 1. Common Data Preparation
+                        
+                        // Date formatting for Mobile
+                        let dateDisplay = student.session_name;
+                        const dateMatch = dateDisplay.match(/\d{4}-\d{2}-\d{2}/);
+                        const timeMatch = dateDisplay.match(/(上午|下午|Morning|Afternoon)/i);
+                        if (dateMatch) {
+                            dateDisplay = dateMatch[0];
+                            if (timeMatch) {
+                                dateDisplay += ' ' + (timeMatch[0] === 'Morning' ? '上午' : (timeMatch[0] === 'Afternoon' ? '下午' : timeMatch[0]));
+                            }
+                        } else if (dateDisplay.length > 20) {
+                            dateDisplay = '...' + dateDisplay.slice(-20);
+                        }
+
+                        // Progress Logic for PC
+                        let progressClass = 'bg-secondary';
+                        let progressText = '未开始';
+                        if (student.scored_questions > 0) {
+                            if (student.scored_questions === student.total_questions) {
+                                progressClass = 'bg-success';
+                                progressText = '已完成';
+                            } else {
+                                progressClass = 'bg-warning text-dark';
+                                progressText = `进行中 (${student.scored_questions}/${student.total_questions})`;
+                            }
+                        }
+
+                        // 2. Mobile List Item Generation
+                        listHtml += `
+                            <div class="col-12 col-md-6 col-lg-4">
+                                <div class="card h-100 shadow-sm border-0" style="border-radius: 12px; background-color: #f8f9fa;">
+                                    <div class="card-body d-flex align-items-center justify-content-between p-3" 
+                                         onclick="window.location.href='/score-entry/form?student_id=${student.student_id}&template_name=${encodeURIComponent(templateName)}'"
+                                         style="cursor: pointer;">
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">${student.name}</h5>
+                                            <div class="text-muted small">
+                                                <i class="far fa-clock me-1"></i>${dateDisplay}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-primary rounded-pill px-4">登分</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+
+                        // 3. PC Table Row Generation
+                        tableHtml += `
+                            <tr class="cursor-pointer" onclick="window.location.href='/score-entry/form?student_id=${student.student_id}&template_name=${encodeURIComponent(templateName)}'">
+                                <td>${student.student_code}</td>
+                                <td class="fw-bold">${student.name}</td>
+                                <td>${student.session_name}</td>
+                                <td><span class="badge ${progressClass}">${progressText}</span></td>
+                                <td>
+                                    <a href="/score-entry/form?student_id=${student.student_id}&template_name=${encodeURIComponent(templateName)}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-pen"></i> 录入
+                                    </a>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    listBody.innerHTML = listHtml;
+                    tableBody.innerHTML = tableHtml;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('加载考生数据失败');
+                });
+        }
+
+        function showError(msg) {
+            document.getElementById('loading').classList.add('d-none');
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = msg;
+            errorDiv.classList.remove('d-none');
+        }
+    </script>
+    <style>
+        .cursor-pointer {
+            cursor: pointer;
+        }
+    </style>
+</body>
+</html>

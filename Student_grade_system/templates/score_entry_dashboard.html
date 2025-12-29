@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>评分录入 - 选择试卷 - 橡心国际WTF活动管理平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-graduation-cap me-2"></i>橡心国际WTF管理平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-tachometer-alt"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('score_entry_dashboard') }}">
+                            <i class="fas fa-edit"></i> 评分录入
+                        </a>
+                    </li>
+                </ul>
+                <div class="d-flex align-items-center">
+                    <span class="text-light me-3">
+                        <i class="fas fa-user-circle"></i> {{ session.get('username', 'User') }}
+                    </span>
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">退出</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">首页</a></li>
+                <li class="breadcrumb-item active" aria-current="page">评分录入</li>
+            </ol>
+        </nav>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h4 class="card-title mb-3"><i class="fas fa-file-alt text-primary me-2"></i>选择评分试卷</h4>
+                        <p class="text-muted">请选择一个试卷模板进行评分录入。系统会自动聚合使用该模板的所有考试场次。</p>
+                        
+                        <div id="loading" class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2 text-muted">正在加载试卷模板...</p>
+                        </div>
+
+                        <div id="error-message" class="alert alert-danger d-none"></div>
+
+                        <div id="templates-container" class="row g-4 d-none">
+                            <!-- 模板卡片将在这里动态渲染 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchTemplates();
+        });
+
+        function fetchTemplates() {
+            fetch('/api/score-entry/templates')
+                .then(response => response.json())
+                .then(data => {
+                    const loading = document.getElementById('loading');
+                    const container = document.getElementById('templates-container');
+                    
+                    loading.classList.add('d-none');
+                    container.classList.remove('d-none');
+                    
+                    if (data.length === 0) {
+                        container.innerHTML = '<div class="col-12 text-center text-muted">暂无可用试卷模板</div>';
+                        return;
+                    }
+
+                    let html = '';
+                    data.forEach(template => {
+                        html += `
+                            <div class="col-md-6 col-lg-4">
+                                <div class="card h-100 border-start border-4 border-primary hover-shadow">
+                                    <div class="card-body">
+                                        <h5 class="card-title fw-bold">${template.name}</h5>
+                                        <p class="card-text text-muted small mb-3">
+                                            <i class="fas fa-calendar-check me-1"></i> 包含 ${template.session_count} 个场次
+                                        </p>
+                                        <div class="d-flex justify-content-between align-items-center mt-3">
+                                            <span class="badge bg-info text-dark">
+                                                <i class="fas fa-users me-1"></i> ${template.student_count} 考生
+                                            </span>
+                                            <a href="/score-entry/list?template_name=${encodeURIComponent(template.name)}" 
+                                               class="btn btn-primary btn-sm stretched-link">
+                                                开始录入 <i class="fas fa-arrow-right ms-1"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('loading').classList.add('d-none');
+                    const errorDiv = document.getElementById('error-message');
+                    errorDiv.textContent = '加载失败，请重试';
+                    errorDiv.classList.remove('d-none');
+                });
+        }
+    </script>
+    <style>
+        .hover-shadow:hover {
+            box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+            transition: box-shadow .3s ease-in-out;
+        }
+    </style>
+</body>
+</html>

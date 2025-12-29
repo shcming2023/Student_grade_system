@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>试卷管理 - 橡心国际WTF</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-graduation-cap me-2"></i>橡心国际WTF管理平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="fas fa-home"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-tachometer-alt"></i> 仪表板
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('exam_sessions') }}">
+                            <i class="fas fa-calendar-alt"></i> 考试管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('exam_templates') }}">
+                            <i class="fas fa-file-signature"></i> 试卷管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('students') }}">
+                            <i class="fas fa-user-graduate"></i> 考生管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('registration') }}">
+                            <i class="fas fa-clipboard-check"></i> 报考管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('score_entry_dashboard') }}">
+                            <i class="fas fa-edit"></i> 评分录入
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('report_cards') }}">
+                            <i class="fas fa-file-alt"></i> 成绩单
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('statistics') }}">
+                            <i class="fas fa-chart-bar"></i> 统计报表
+                        </a>
+                    </li>
+                    {% if session.get('role') == 'admin' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('teachers_page') }}">
+                            <i class="fas fa-chalkboard-teacher"></i> 教师管理
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt"></i> 注销
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <h2><i class="fas fa-file-signature me-2 text-wtf"></i>试卷管理</h2>
+            </div>
+            <div class="col-md-6 text-end">
+                <button class="btn btn-success me-2" onclick="importTemplates()">
+                    <i class="fas fa-file-excel me-2"></i>从Excel导入
+                </button>
+                <button class="btn btn-wtf" onclick="openCreateModal()">
+                    <i class="fas fa-plus me-2"></i>新建试卷模板
+                </button>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>试卷名称</th>
+                                <th>所属考试</th>
+                                <th>科目</th>
+                                <th>年级</th>
+                                <th>出卷</th>
+                                <th>阅卷</th>
+                                <th>题目数量</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for template in templates %}
+                            <tr>
+                                <td>{{ template.id }}</td>
+                                <td>{{ template.name }}</td>
+                                <td>{{ template.exam_session.name if template.exam_session else '-' }}</td>
+                                <td>{{ template.subject.name }}</td>
+                                <td>{{ template.grade_level }}</td>
+                                <td>{{ template.creator.username if template.creator else '-' }}</td>
+                                <td>{{ template.grader.username if template.grader else '-' }}</td>
+                                <td><span class="badge bg-info">{{ template.total_questions }}</span></td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary me-1" onclick='openQuestionsModal({{ template.to_dict()|tojson }})'>
+                                        <i class="fas fa-list"></i> 题目
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary me-1" onclick='openEditModal({{ template.to_dict()|tojson }})'>
+                                        <i class="fas fa-edit"></i> 编辑
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteTemplate({{ template.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Template Modal -->
+    <div class="modal fade" id="templateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">新建试卷模板</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="templateForm">
+                        <input type="hidden" id="templateDbId">
+                        <div class="mb-3">
+                            <label class="form-label">试卷名称</label>
+                            <input type="text" class="form-control" id="templateName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">所属考试</label>
+                            <select class="form-select" id="templateSession">
+                                <option value="">-- 请选择 --</option>
+                                {% for session in sessions %}
+                                <option value="{{ session.id }}">{{ session.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">科目</label>
+                            <select class="form-select" id="templateSubject" required>
+                                {% for subject in subjects %}
+                                <option value="{{ subject.id }}">{{ subject.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">适用年级</label>
+                            <select class="form-select" id="templateGrade" required>
+                                <option value="G1">G1</option>
+                                <option value="G2">G2</option>
+                                <option value="G3">G3</option>
+                                <option value="G4">G4</option>
+                                <option value="G5">G5</option>
+                                <option value="G6">G6</option>
+                                <option value="ALL">通用</option>
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">出卷老师</label>
+                                <select class="form-select" id="templateCreator">
+                                    <option value="">-- 请选择 --</option>
+                                    {% for teacher in teachers %}
+                                    <option value="{{ teacher.id }}">{{ teacher.username }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">阅卷老师</label>
+                                <select class="form-select" id="templateGrader">
+                                    <option value="">-- 请选择 --</option>
+                                    {% for teacher in teachers %}
+                                    <option value="{{ teacher.id }}">{{ teacher.username }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveTemplate()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Questions Modal -->
+    <div class="modal fade" id="questionsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="questionsModalTitle">管理题目</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <form id="addQuestionForm" class="row g-3">
+                            <input type="hidden" id="currentTemplateId">
+                            <input type="hidden" id="questionDbId">
+                            <div class="col-md-2">
+                                <input type="text" class="form-control" id="qNumber" placeholder="题号" required>
+                            </div>
+                            <div class="col-md-3">
+                                <input type="text" class="form-control" id="qModule" placeholder="模块">
+                            </div>
+                            <div class="col-md-3">
+                                <input type="text" class="form-control" id="qKnowledge" placeholder="知识点">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" step="0.5" class="form-control" id="qScore" placeholder="分值" required>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-success w-100" onclick="saveQuestion()">
+                                    <i class="fas fa-save"></i> 保存
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>题号</th>
+                                    <th>模块</th>
+                                    <th>知识点</th>
+                                    <th>分值</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="questionsTableBody">
+                                <!-- Loaded via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        let templateModal;
+        let questionsModal;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            templateModal = new bootstrap.Modal(document.getElementById('templateModal'));
+            questionsModal = new bootstrap.Modal(document.getElementById('questionsModal'));
+        });
+
+        function importTemplates() {
+            // Fetch sessions first
+            fetch('/api/exam-sessions')
+                .then(res => res.json())
+                .then(data => {
+                    const sessions = data.sessions;
+                    let options = sessions.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                    
+                    Swal.fire({
+                        title: '导入试卷模板',
+                        html: `
+                            <div class="mb-3 text-start">
+                                <label class="form-label">选择Excel文件</label>
+                                <input type="file" id="importFile" class="form-control" accept=".xlsx, .xls">
+                            </div>
+                            <div class="mb-3 text-start">
+                                <label class="form-label">选择考试场次</label>
+                                <select id="importSession" class="form-select">
+                                    <option value="">-- 请选择 --</option>
+                                    ${options}
+                                </select>
+                            </div>
+                            <p class="text-muted small text-start">注意：导入将覆盖同名试卷的现有题目。</p>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: '开始导入',
+                        showLoaderOnConfirm: true,
+                        preConfirm: () => {
+                            const fileInput = document.getElementById('importFile');
+                            const sessionId = document.getElementById('importSession').value;
+                            
+                            if (fileInput.files.length === 0) {
+                                Swal.showValidationMessage('请选择文件');
+                                return false;
+                            }
+                            if (!sessionId) {
+                                Swal.showValidationMessage('请选择考试场次');
+                                return false;
+                            }
+                            
+                            const formData = new FormData();
+                            formData.append('file', fileInput.files[0]);
+                            formData.append('session_id', sessionId);
+                            
+                            return fetch('/api/templates/import', {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(response => {
+                                if (!response.ok) {
+                                    return response.json().then(err => { throw new Error(err.message || response.statusText) });
+                                }
+                                return response.json()
+                            })
+                            .catch(error => {
+                                Swal.showValidationMessage(
+                                    `请求失败: ${error}`
+                                )
+                            })
+                        },
+                        allowOutsideClick: () => !Swal.isLoading()
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            if (result.value.success) {
+                                Swal.fire('成功', result.value.message, 'success').then(() => location.reload());
+                            } else {
+                                Swal.fire('错误', result.value.message, 'error');
+                            }
+                        }
+                    })
+                })
+                .catch(error => {
+                    console.error('Error fetching sessions:', error);
+                    Swal.fire('错误', '无法获取考试场次列表', 'error');
+                });
+        }
+
+        function openCreateModal() {
+            document.getElementById('modalTitle').textContent = '新建试卷模板';
+            document.getElementById('templateForm').reset();
+            document.getElementById('templateDbId').value = '';
+            templateModal.show();
+        }
+
+        function openEditModal(template) {
+            document.getElementById('modalTitle').textContent = '编辑试卷模板';
+            document.getElementById('templateDbId').value = template.id;
+            document.getElementById('templateName').value = template.name;
+            document.getElementById('templateSession').value = template.exam_session_id || '';
+            document.getElementById('templateSubject').value = template.subject_id;
+            document.getElementById('templateGrade').value = template.grade_level;
+            document.getElementById('templateCreator').value = template.creator_id || '';
+            document.getElementById('templateGrader').value = template.grader_id || '';
+            templateModal.show();
+        }
+
+        function saveTemplate() {
+            const id = document.getElementById('templateDbId').value;
+            const data = {
+                name: document.getElementById('templateName').value,
+                exam_session_id: document.getElementById('templateSession').value || null,
+                subject_id: document.getElementById('templateSubject').value,
+                grade_level: document.getElementById('templateGrade').value,
+                creator_id: document.getElementById('templateCreator').value || null,
+                grader_id: document.getElementById('templateGrader').value || null
+            };
+
+            const url = id ? `/api/exam_templates/${id}` : '/api/exam_templates';
+            const method = id ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    Swal.fire('成功', result.message, 'success').then(() => location.reload());
+                } else {
+                    Swal.fire('错误', result.message, 'error');
+                }
+            });
+        }
+
+        function deleteTemplate(id) {
+            Swal.fire({
+                title: '确定删除?',
+                text: "删除试卷模板将连同删除所有题目！",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: '确定删除'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`/api/exam_templates/${id}`, { method: 'DELETE' })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            Swal.fire('已删除', result.message, 'success').then(() => location.reload());
+                        } else {
+                            Swal.fire('错误', result.message, 'error');
+                        }
+                    });
+                }
+            });
+        }
+
+        function openQuestionsModal(template) {
+            document.getElementById('questionsModalTitle').textContent = `管理题目 - ${template.name}`;
+            document.getElementById('currentTemplateId').value = template.id;
+            document.getElementById('addQuestionForm').reset();
+            loadQuestions(template.id);
+            questionsModal.show();
+        }
+
+        function loadQuestions(templateId) {
+            fetch(`/api/exam_templates/${templateId}/questions`)
+            .then(response => response.json())
+            .then(questions => {
+                const tbody = document.getElementById('questionsTableBody');
+                tbody.innerHTML = '';
+                questions.forEach(q => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${q.question_number}</td>
+                            <td>${q.module || '-'}</td>
+                            <td>${q.knowledge_point || '-'}</td>
+                            <td>${q.score}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-secondary me-1" onclick='editQuestion(${JSON.stringify(q)})'>
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteQuestion(${q.id})">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            });
+        }
+
+        function editQuestion(q) {
+            document.getElementById('questionDbId').value = q.id;
+            document.getElementById('qNumber').value = q.question_number;
+            document.getElementById('qModule').value = q.module || '';
+            document.getElementById('qKnowledge').value = q.knowledge_point || '';
+            document.getElementById('qScore').value = q.score;
+        }
+
+        function saveQuestion() {
+            const templateId = document.getElementById('currentTemplateId').value;
+            const questionId = document.getElementById('questionDbId').value;
+            const data = {
+                question_number: document.getElementById('qNumber').value,
+                module: document.getElementById('qModule').value,
+                knowledge_point: document.getElementById('qKnowledge').value,
+                score: document.getElementById('qScore').value
+            };
+
+            if (!data.question_number || !data.score) {
+                Swal.fire('提示', '请填写题号和分值', 'warning');
+                return;
+            }
+
+            const url = questionId ? `/api/questions/${questionId}` : `/api/exam_templates/${templateId}/questions`;
+            const method = questionId ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    document.getElementById('addQuestionForm').reset();
+                    document.getElementById('questionDbId').value = ''; // Reset ID
+                    loadQuestions(templateId);
+                } else {
+                    Swal.fire('错误', result.message, 'error');
+                }
+            });
+        }
+
+        function deleteQuestion(id) {
+            if(!confirm('确定删除此题目?')) return;
+            
+            fetch(`/api/questions/${id}`, { method: 'DELETE' })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    const templateId = document.getElementById('currentTemplateId').value;
+                    loadQuestions(templateId);
+                } else {
+                    Swal.fire('错误', result.message, 'error');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

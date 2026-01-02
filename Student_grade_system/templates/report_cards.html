@@ -195,7 +195,7 @@
         let currentPage = 1;
         let pageSize = 20;
         let totalPages = 1;
-        let selectedStudents = new Set();
+        let selectedStudents = new Map();
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -279,7 +279,7 @@
                 row.innerHTML = `
                     <td>
                         <input type="checkbox" class="form-check-input me-2" 
-                               onchange="toggleSelection(${card.studentId})"
+                               onchange="toggleSelection(${card.studentId}, ${card.examSessionId}, ${card.templateId})"
                                ${selectedStudents.has(card.studentId) ? 'checked' : ''}>
                         ${card.studentName}
                     </td>
@@ -299,7 +299,7 @@
                             <button class="btn btn-outline-success" onclick="downloadPDF(${card.studentId}, ${card.examSessionId}, ${card.templateId})">
                                 <i class="bi bi-download"></i> PDF
                             </button>
-                            <button class="btn btn-outline-info" onclick="emailReportCard(${card.studentId})">
+                            <button class="btn btn-outline-info" onclick="emailReportCard(${card.studentId}, ${card.examSessionId}, ${card.templateId})">
                                 <i class="bi bi-envelope"></i> 邮件
                             </button>
                         </div>
@@ -316,7 +316,7 @@
                             <div>
                                 <h6 class="fw-bold mb-1">
                                     <input type="checkbox" class="form-check-input me-2" 
-                                        onchange="toggleSelection(${card.studentId})"
+                                        onchange="toggleSelection(${card.studentId}, ${card.examSessionId}, ${card.templateId})"
                                         ${selectedStudents.has(card.studentId) ? 'checked' : ''}>
                                     ${card.studentName}
                                 </h6>
@@ -374,11 +374,15 @@
         }
 
         // 切换选择
-        function toggleSelection(studentId) {
+        function toggleSelection(studentId, examSessionId, templateId) {
             if (selectedStudents.has(studentId)) {
                 selectedStudents.delete(studentId);
             } else {
-                selectedStudents.add(studentId);
+                selectedStudents.set(studentId, {
+                    student_id: studentId,
+                    exam_session_id: examSessionId,
+                    template_id: templateId
+                });
             }
             updateBatchActions();
         }
@@ -411,8 +415,27 @@
         }
 
         // 邮件发送
-        function emailReportCard(studentId) {
-            alert('邮件发送功能开发中...');
+        function emailReportCard(studentId, examSessionId, templateId) {
+            if (!confirm('确定要发送邮件给该学生吗？')) return;
+            
+            fetch('/api/email/send-report-card', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    student_id: studentId,
+                    exam_session_id: examSessionId,
+                    template_id: templateId
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    alert('发送成功');
+                } else {
+                    alert('发送失败: ' + data.message);
+                }
+            })
+            .catch(e => alert('发送出错'));
         }
 
         // 批量生成PDF
@@ -435,7 +458,41 @@
                 return;
             }
 
-            alert('生成选中PDF功能开发中...');
+            const items = Array.from(selectedStudents.values());
+            
+            // Show loading state?
+            const btn = document.querySelector('button[onclick="generateSelectedPDFs()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 生成中...';
+            btn.disabled = true;
+
+            fetch('/api/pdf/batch-generate-zip', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ items: items })
+            })
+            .then(res => {
+                if(res.ok) {
+                    return res.blob();
+                }
+                throw new Error('生成失败');
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'ReportCards_Selected.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                clearSelection();
+            })
+            .catch(e => alert('生成出错: ' + e.message))
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
         }
 
         // 发送邮件
@@ -445,7 +502,25 @@
                 return;
             }
 
-            alert('批量邮件发送功能开发中...');
+            if (!confirm(`确定要发送邮件给选中的 ${selectedStudents.size} 位学生吗？`)) return;
+
+            const items = Array.from(selectedStudents.values());
+            
+            fetch('/api/email/batch-send-report-card-items', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ items: items })
+            })
+            .then(res => res.json())
+            .then(data => {
+                 if(data.success) {
+                     alert(data.summary);
+                     clearSelection();
+                 } else {
+                     alert('部分失败: ' + data.summary);
+                 }
+            })
+            .catch(e => alert('发送出错'));
         }
 
         // 清除选择

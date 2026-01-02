@@ -27,6 +27,10 @@ from reportlab.graphics.shapes import Drawing
 from reportlab.graphics.charts.spider import SpiderChart
 from reportlab.lib.utils import ImageReader
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 
 # 创建Flask应用
 app = Flask(__name__)
@@ -37,6 +41,13 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
+# Email Config
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.example.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'user@example.com')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'password')
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@example.com')
 
 # 初始化数据库
 db = SQLAlchemy(app)
@@ -89,6 +100,7 @@ class Student(db.Model):
     grade_level = db.Column(db.String(10), nullable=False)
     school_id = db.Column(db.Integer, db.ForeignKey('schools.id'))
     class_name = db.Column(db.String(50), nullable=True) # Changed to nullable explicitly
+    email = db.Column(db.String(100)) # Added email field
     
     school = db.relationship('School', backref='students')
 
@@ -790,6 +802,10 @@ def api_score_entry_student_detail(student_id):
         ).all()
         scores = {s.question_id: s.score for s in saved_scores}
         
+    # 3.1 Get Report Card Comment
+    report_card = ReportCard.query.filter_by(registration_id=reg.id).first()
+    ai_comment = report_card.ai_comment if report_card else ""
+        
     # 4. Navigation (Prev/Next)
     prev_id = None
     next_id = None
@@ -834,6 +850,7 @@ def api_score_entry_student_detail(student_id):
             'module': q.module
         } for q in questions],
         'scores': scores,
+        'ai_comment': ai_comment,
         'navigation': {
             'prev_id': prev_id,
             'next_id': next_id
@@ -850,12 +867,44 @@ def api_score_entry_save():
     
     # Check if batch mode (scores dict)
     scores_dict = data.get('scores') # {question_id: score_value}
+    ai_comment = data.get('ai_comment')
+    template_name = data.get('template_name')
     
-    if scores_dict and isinstance(scores_dict, dict):
+    if scores_dict is not None and isinstance(scores_dict, dict):
         if not student_id:
              return jsonify({'success': False, 'message': 'Missing student_id'}), 400
              
         try:
+            # Save AI Comment if provided
+            if ai_comment is not None:
+                reg = None
+                
+                # 1. Try by template_name
+                if template_name:
+                    reg = db.session.query(ExamRegistration)\
+                        .join(ExamTemplate, ExamRegistration.exam_template_id == ExamTemplate.id)\
+                        .filter(ExamRegistration.student_id == student_id)\
+                        .filter(ExamTemplate.name == template_name)\
+                        .first()
+                        
+                # 2. Fallback to question context
+                if not reg and scores_dict:
+                    first_q_id = next(iter(scores_dict.keys()), None)
+                    if first_q_id:
+                        q = Question.query.get(int(first_q_id))
+                        if q:
+                            reg = ExamRegistration.query.filter_by(
+                                student_id=student_id, 
+                                exam_template_id=q.exam_template_id
+                            ).first()
+                            
+                if reg:
+                    report_card = ReportCard.query.filter_by(registration_id=reg.id).first()
+                    if not report_card:
+                        report_card = ReportCard(registration_id=reg.id)
+                        db.session.add(report_card)
+                    report_card.ai_comment = ai_comment
+                             
             for q_id_str, score_val in scores_dict.items():
                 q_id = int(q_id_str)
                 # Logic reused for each score
@@ -1247,6 +1296,248 @@ def api_export_stats(session_id):
         download_name=filename
     )
 
+# --- Email Functionality ---
+
+def send_email_with_attachment(to_email, subject, body, attachment_bytes, attachment_filename):
+    """Sends an email with a PDF attachment."""
+    msg = MIMEMultipart()
+    msg['From'] = app.config['MAIL_DEFAULT_SENDER']
+    msg['To'] = to_email
+    msg['Subject'] = subject
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    if attachment_bytes:
+        part = MIMEApplication(attachment_bytes.getvalue(), Name=attachment_filename)
+        part['Content-Disposition'] = f'attachment; filename="{attachment_filename}"'
+        msg.attach(part)
+
+    try:
+        # For development/demo, if MAIL_SERVER is 'smtp.example.com', we just log it
+        if app.config['MAIL_SERVER'] == 'smtp.example.com':
+            print(f"MOCK EMAIL SENT to {to_email} with subject '{subject}'")
+            return True, "Mock email sent (Server not configured)"
+            
+        server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+        if app.config['MAIL_USE_TLS']:
+            server.starttls()
+        if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
+            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+        
+        server.send_message(msg)
+        server.quit()
+        return True, "Email sent successfully"
+    except Exception as e:
+        print(f"EMAIL ERROR: {str(e)}")
+        return False, str(e)
+
+@app.route('/api/email/send-report-card', methods=['POST'])
+@login_required
+def send_report_card_email():
+    """发送成绩单邮件"""
+    data = request.get_json()
+    student_id = data.get('student_id')
+    exam_session_id = data.get('exam_session_id')
+    template_id = data.get('template_id')
+    
+    student = Student.query.get(student_id)
+    if not student:
+        return jsonify({'success': False, 'message': 'Student not found'}), 404
+        
+    if not student.email:
+         return jsonify({'success': False, 'message': 'Student has no email address'}), 400
+         
+    # Generate PDF
+    # Note: generate_report_card_pdf might need to be imported or available in scope. 
+    # It is defined in this file (or imported if refactored).
+    # Assuming it is available as 'generate_report_card_pdf' in this module.
+    pdf_buffer = generate_report_card_pdf(student_id, exam_session_id, template_id)
+    if not pdf_buffer:
+        return jsonify({'success': False, 'message': 'Failed to generate PDF'}), 500
+        
+    # Send Email
+    exam_session = ExamSession.query.get(exam_session_id)
+    session_name = exam_session.name if exam_session else "Exam"
+    
+    subject = f"Score Report: {student.name} - {session_name}"
+    body = f"Dear {student.name},\n\nPlease find attached your score report for {session_name}.\n\nBest regards,\nWay To Future Team"
+    filename = f"ReportCard_{student.name}_{session_name}.pdf"
+    
+    success, msg = send_email_with_attachment(student.email, subject, body, pdf_buffer, filename)
+    
+    if success:
+        return jsonify({'success': True, 'message': msg})
+    else:
+        return jsonify({'success': False, 'message': msg}), 500
+
+import zipfile
+
+@app.route('/api/pdf/batch-generate-zip', methods=['POST'])
+@login_required
+def batch_generate_zip():
+    """批量生成PDF压缩包"""
+    data = request.get_json()
+    items = data.get('items', [])
+    
+    if not items:
+        return jsonify({'error': 'No items provided'}), 400
+        
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for item in items:
+            s_id = item.get('student_id')
+            sess_id = item.get('exam_session_id')
+            tmpl_id = item.get('template_id')
+            
+            student = Student.query.get(s_id)
+            if not student:
+                continue
+                
+            try:
+                pdf_buffer = generate_report_card_pdf(s_id, sess_id, tmpl_id)
+                if pdf_buffer:
+                    exam_session = ExamSession.query.get(sess_id)
+                    session_name = exam_session.name if exam_session else "Exam"
+                    filename = f"ReportCard_{student.name}_{session_name}.pdf"
+                    zip_file.writestr(filename, pdf_buffer.getvalue())
+            except Exception as e:
+                print(f"Error generating PDF for {s_id}: {e}")
+                
+    zip_buffer.seek(0)
+    return send_file(
+        zip_buffer,
+        as_attachment=True,
+        download_name='ReportCards_Batch.zip',
+        mimetype='application/zip'
+    )
+
+@app.route('/api/email/batch-send-report-card-items', methods=['POST'])
+@login_required
+def batch_send_report_card_items():
+    """批量发送成绩单邮件 (按列表)"""
+    data = request.get_json()
+    items = data.get('items', [])
+    
+    success_count = 0
+    fail_count = 0
+    details = []
+    processed_keys = set()
+    
+    for item in items:
+        s_id = item.get('student_id')
+        sess_id = item.get('exam_session_id')
+        tmpl_id = item.get('template_id')
+        
+        key = f"{s_id}-{sess_id}"
+        if key in processed_keys:
+            continue
+        processed_keys.add(key)
+        
+        student = Student.query.get(s_id)
+        if not student:
+            continue
+            
+        if not student.email:
+            fail_count += 1
+            details.append({'student': student.name, 'status': 'No Email'})
+            continue
+            
+        try:
+            pdf_buffer = generate_report_card_pdf(s_id, sess_id, tmpl_id)
+            if not pdf_buffer:
+                fail_count += 1
+                details.append({'student': student.name, 'status': 'PDF Generation Failed'})
+                continue
+                
+            exam_session = ExamSession.query.get(sess_id)
+            session_name = exam_session.name if exam_session else "Exam"
+            subject = f"Score Report: {student.name} - {session_name}"
+            body = f"Dear {student.name},\n\nPlease find attached your score report for {session_name}.\n\nBest regards,\nWay To Future Team"
+            filename = f"ReportCard_{student.name}_{session_name}.pdf"
+            
+            success, msg = send_email_with_attachment(student.email, subject, body, pdf_buffer, filename)
+            
+            if success:
+                success_count += 1
+            else:
+                fail_count += 1
+                details.append({'student': student.name, 'status': f'Email Error: {msg}'})
+                
+        except Exception as e:
+            fail_count += 1
+            details.append({'student': student.name, 'status': f'Error: {str(e)}'})
+
+    return jsonify({
+        'success': True, 
+        'summary': f"Sent: {success_count}, Failed: {fail_count}",
+        'details': details
+    })
+
+@app.route('/api/email/batch-send-report-card', methods=['POST'])
+@login_required
+def batch_send_report_card_email():
+    """批量发送成绩单邮件"""
+    data = request.get_json()
+    exam_session_id = data.get('exam_session_id')
+    template_id = data.get('template_id') # Optional
+    
+    # Logic: Get all students in session (and template if provided)
+    query = db.session.query(ExamRegistration)\
+        .filter(ExamRegistration.exam_session_id == exam_session_id)
+        
+    if template_id:
+        query = query.filter(ExamRegistration.exam_template_id == template_id)
+        
+    registrations = query.all()
+    
+    success_count = 0
+    fail_count = 0
+    details = []
+    
+    processed_student_ids = set()
+    
+    for reg in registrations:
+        if reg.student_id in processed_student_ids:
+            continue
+        processed_student_ids.add(reg.student_id)
+        
+        student = reg.student
+        if not student.email:
+            fail_count += 1
+            details.append({'student': student.name, 'status': 'No Email'})
+            continue
+            
+        try:
+            pdf_buffer = generate_report_card_pdf(student.id, exam_session_id, template_id)
+            if not pdf_buffer:
+                fail_count += 1
+                details.append({'student': student.name, 'status': 'PDF Generation Failed'})
+                continue
+                
+            exam_session = ExamSession.query.get(exam_session_id)
+            session_name = exam_session.name if exam_session else "Exam"
+            subject = f"Score Report: {student.name} - {session_name}"
+            body = f"Dear {student.name},\n\nPlease find attached your score report for {session_name}.\n\nBest regards,\nWay To Future Team"
+            filename = f"ReportCard_{student.name}_{session_name}.pdf"
+            
+            success, msg = send_email_with_attachment(student.email, subject, body, pdf_buffer, filename)
+            
+            if success:
+                success_count += 1
+            else:
+                fail_count += 1
+                details.append({'student': student.name, 'status': f'Email Error: {msg}'})
+                
+        except Exception as e:
+            fail_count += 1
+            details.append({'student': student.name, 'status': f'Error: {str(e)}'})
+            
+    return jsonify({
+        'success': True, 
+        'summary': f"Sent: {success_count}, Failed: {fail_count}",
+        'details': details
+    })
+
 # API removed per user request (v2.2)
 
 
@@ -1268,6 +1559,103 @@ def api_init_templates():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/ai-comment/generate', methods=['POST'])
+@login_required
+def api_generate_ai_comment():
+    """生成AI评语 (Mock AI)"""
+    data = request.get_json()
+    student_id = data.get('student_id')
+    template_name = data.get('template_name') # Optional
+    
+    if not student_id:
+        return jsonify({'error': 'Missing student_id'}), 400
+        
+    student = Student.query.get(student_id)
+    if not student:
+        return jsonify({'error': 'Student not found'}), 404
+        
+    # Get scores
+    # Logic similar to student-detail
+    query = db.session.query(ExamRegistration, ExamTemplate)\
+        .join(ExamTemplate, ExamRegistration.exam_template_id == ExamTemplate.id)\
+        .filter(ExamRegistration.student_id == student_id)
+        
+    if template_name:
+        query = query.filter(ExamTemplate.name == template_name)
+        
+    reg_data = query.first()
+    if not reg_data:
+         return jsonify({'error': 'Registration not found'}), 404
+         
+    reg, template = reg_data
+    
+    questions = Question.query.filter_by(exam_template_id=template.id).all()
+    q_ids = [q.id for q in questions]
+    scores = Score.query.filter(
+        Score.student_id == student_id,
+        Score.question_id.in_(q_ids)
+    ).all()
+    
+    # Calculate Module Performance
+    module_stats = {}
+    total_score = 0
+    max_score = 0
+    
+    for q in questions:
+        module = q.module or 'General'
+        if module not in module_stats:
+            module_stats[module] = {'got': 0, 'total': 0}
+        
+        module_stats[module]['total'] += q.score
+        max_score += q.score
+        
+        # Find score
+        s = next((x for x in scores if x.question_id == q.id), None)
+        if s:
+            module_stats[module]['got'] += s.score
+            total_score += s.score
+            
+    # Generate Comment
+    comment_parts = []
+    
+    # Part 1: Overall
+    percentage = (total_score / max_score * 100) if max_score > 0 else 0
+    if percentage >= 90:
+        intro = f"{student.name}同学在本次{template.name}测评中表现卓越，总分达到了{total_score}分（满分{max_score}分）。"
+    elif percentage >= 80:
+        intro = f"{student.name}同学在本次{template.name}测评中表现优异，基础扎实，总分为{total_score}分。"
+    elif percentage >= 60:
+        intro = f"{student.name}同学在本次{template.name}测评中顺利完成考试，总分为{total_score}分，仍有进步空间。"
+    else:
+        intro = f"{student.name}同学在本次{template.name}测评中表现有待提高，总分为{total_score}分，建议加强基础练习。"
+    comment_parts.append(intro)
+    
+    # Part 2: Module Analysis
+    strong_modules = []
+    weak_modules = []
+    
+    for mod, stats in module_stats.items():
+        if stats['total'] > 0:
+            mod_pct = (stats['got'] / stats['total']) * 100
+            if mod_pct >= 85:
+                strong_modules.append(mod)
+            elif mod_pct < 60:
+                weak_modules.append(mod)
+                
+    if strong_modules:
+        comment_parts.append(f"在{', '.join(strong_modules)}模块上掌握得非常好，展现了深厚的理解能力。")
+        
+    if weak_modules:
+        comment_parts.append(f"建议后续重点复习{', '.join(weak_modules)}相关知识点，通过针对性练习填补知识盲区。")
+        
+    # Part 3: Encouragement
+    encourage = "希望在未来的学习中继续保持热情，取得更大的突破！"
+    comment_parts.append(encourage)
+    
+    generated_comment = "".join(comment_parts)
+    
+    return jsonify({'comment': generated_comment})
 
 def generate_report_card_pdf(student_id, exam_session_id, template_id=None):
     """生成学生成绩单PDF - Refactored v9 (Compact Layout)"""

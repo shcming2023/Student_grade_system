@@ -1,63 +1,39 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>评分录入 - 橡心国际WTF活动管理平台</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
-    <style>
-        .score-input:focus {
-            background-color: #f0f8ff;
-            border-color: #0d6efd;
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-        }
-        .question-card {
-            transition: all 0.2s;
-        }
-        .question-card:hover {
-            background-color: #f8f9fa;
-        }
-        .sticky-footer {
-            position: sticky;
-            bottom: 0;
-            background: white;
-            padding: 1rem 0;
-            border-top: 1px solid #dee2e6;
-            z-index: 1000;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-        }
-    </style>
-</head>
-<body>
-    <!-- 导航栏 -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('index') }}">
-                <i class="fas fa-graduation-cap me-2"></i>橡心国际WTF管理平台
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard') }}">
-                            <i class="fas fa-tachometer-alt"></i> 仪表板
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="{{ url_for('score_entry_dashboard') }}">
-                            <i class="fas fa-edit"></i> 评分录入
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+{% extends "base.html" %}
 
-    <div class="container mt-4 mb-5">
+{% block title %}评分录入 - 橡心国际WTF活动管理平台{% endblock %}
+
+{% block extra_css %}
+<style>
+    .score-input:focus {
+        background-color: #f0f8ff;
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .question-card {
+        transition: all 0.2s;
+    }
+    .question-card:hover {
+        background-color: #f8f9fa;
+    }
+    .sticky-footer {
+        position: sticky;
+        bottom: 0;
+        background: white;
+        padding: 1rem 0;
+        border-top: 1px solid #dee2e6;
+        z-index: 1000;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+        margin-left: -12px; /* Compensate for padding in base template if needed, or keep standard */
+        margin-right: -12px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-5">
+    <div class="col-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">首页</a></li>
@@ -123,226 +99,227 @@
             </div>
         </div>
     </div>
+</div>
 
-    <!-- 底部固定操作栏 -->
-    <div class="sticky-footer d-none" id="action-bar">
-        <div class="container">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="text-muted small">
-                    <i class="fas fa-info-circle me-1"></i> 修改后请点击保存
-                </div>
-                <div>
-                    <button type="button" class="btn btn-secondary me-2" onclick="history.back()">取消</button>
-                    <button type="button" class="btn btn-primary px-4" id="btn-save" onclick="saveScores()">
-                        <i class="fas fa-save me-1"></i> 保存分数
-                    </button>
-                </div>
+<!-- 底部固定操作栏 -->
+<div class="sticky-footer d-none" id="action-bar">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                <i class="fas fa-info-circle me-1"></i> 修改后请点击保存
+            </div>
+            <div>
+                <button type="button" class="btn btn-secondary me-2" onclick="history.back()">取消</button>
+                <button type="button" class="btn btn-primary px-4" id="btn-save" onclick="saveScores()">
+                    <i class="fas fa-save me-1"></i> 保存分数
+                </button>
             </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        let currentStudentId = null;
-        let currentTemplateName = null;
-        let navigationData = {};
+{% block extra_js %}
+<script>
+    let currentStudentId = null;
+    let currentTemplateName = null;
+    let navigationData = {};
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            currentStudentId = urlParams.get('student_id');
-            currentTemplateName = urlParams.get('template_name');
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        currentStudentId = urlParams.get('student_id');
+        currentTemplateName = urlParams.get('template_name');
 
-            if (!currentStudentId || !currentTemplateName) {
-                showError('参数缺失');
-                return;
-            }
+        if (!currentStudentId || !currentTemplateName) {
+            showError('参数缺失');
+            return;
+        }
 
-            // Setup breadcrumb link
-            const listLink = document.getElementById('breadcrumb-list');
-            listLink.href = `/score-entry/list?template_name=${encodeURIComponent(currentTemplateName)}`;
-            listLink.textContent = `${currentTemplateName}`;
+        // Setup breadcrumb link
+        const listLink = document.getElementById('breadcrumb-list');
+        listLink.href = `/score-entry/list?template_name=${encodeURIComponent(currentTemplateName)}`;
+        listLink.textContent = `${currentTemplateName}`;
 
-            loadData();
+        loadData();
 
-            // Bind prev/next buttons
-            document.getElementById('btn-prev').addEventListener('click', () => {
-                if(navigationData.prev_id) navigateTo(navigationData.prev_id);
-            });
-            document.getElementById('btn-next').addEventListener('click', () => {
-                if(navigationData.next_id) navigateTo(navigationData.next_id);
-            });
+        // Bind prev/next buttons
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            if(navigationData.prev_id) navigateTo(navigationData.prev_id);
         });
+        document.getElementById('btn-next').addEventListener('click', () => {
+            if(navigationData.next_id) navigateTo(navigationData.next_id);
+        });
+    });
 
-        function navigateTo(studentId) {
-            // Check for unsaved changes? (Optional optimization)
-            window.location.href = `/score-entry/form?student_id=${studentId}&template_name=${encodeURIComponent(currentTemplateName)}`;
-        }
+    function navigateTo(studentId) {
+        // Check for unsaved changes? (Optional optimization)
+        window.location.href = `/score-entry/form?student_id=${studentId}&template_name=${encodeURIComponent(currentTemplateName)}`;
+    }
 
-        function loadData() {
-            fetch(`/api/score-entry/student-detail/${currentStudentId}?template_name=${encodeURIComponent(currentTemplateName)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        showError(data.error);
-                        return;
-                    }
-                    renderPage(data);
-                })
-                .catch(err => {
-                    console.error(err);
-                    showError('加载失败');
-                });
-        }
-
-        function renderPage(data) {
-            // 1. Info
-            document.getElementById('student-name').textContent = data.student.name;
-            document.getElementById('student-id').textContent = data.student.student_id;
-            document.getElementById('template-name').textContent = data.student.template_name;
-
-            // 2. Navigation
-            navigationData = data.navigation;
-            document.getElementById('btn-prev').disabled = !data.navigation.prev_id;
-            document.getElementById('btn-next').disabled = !data.navigation.next_id;
-
-            // 3. Questions
-            const container = document.getElementById('questions-container');
-            let html = '';
-            
-            data.questions.forEach(q => {
-                const existingScore = data.scores[q.id] !== undefined ? data.scores[q.id] : '';
-                
-                html += `
-                    <div class="col-md-6 col-lg-4">
-                        <div class="card h-100 question-card border-0 shadow-sm">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between mb-2">
-                                    <h6 class="card-title fw-bold">Q${q.number}</h6>
-                                    <span class="badge bg-light text-dark border">${q.module}</span>
-                                </div>
-                                <div class="input-group">
-                                    <input type="number" class="form-control score-input" 
-                                           name="q_${q.id}" 
-                                           id="q_${q.id}"
-                                           value="${existingScore}"
-                                           min="0" max="${q.score}" step="0.5"
-                                           placeholder="满分: ${q.score}">
-                                    <span class="input-group-text text-muted small">/${q.score}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            container.innerHTML = html;
-
-            // 4. AI Comment
-            document.getElementById('ai-comment').value = data.ai_comment || '';
-
-            // Show UI
-            document.getElementById('loading').classList.add('d-none');
-            document.getElementById('form-container').classList.remove('d-none');
-            document.getElementById('action-bar').classList.remove('d-none');
-        }
-
-        function saveScores() {
-            const btn = document.getElementById('btn-save');
-            const originalText = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>保存中...';
-
-            const scores = {};
-            const inputs = document.querySelectorAll('.score-input');
-            
-            inputs.forEach(input => {
-                if (input.value.trim() !== '') {
-                    const qId = input.id.replace('q_', '');
-                    scores[qId] = parseFloat(input.value);
-                }
-            });
-
-            fetch('/api/score-entry/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    student_id: currentStudentId,
-                    template_name: currentTemplateName,
-                    scores: scores,
-                    ai_comment: document.getElementById('ai-comment').value
-                })
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    // Show success toast or simple alert
-                    // alert('保存成功');
-                    // Instead of alert, change button temporarily
-                    btn.innerHTML = '<i class="fas fa-check me-1"></i> 保存成功';
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-success');
-                    
-                    setTimeout(() => {
-                        btn.disabled = false;
-                        btn.innerHTML = originalText;
-                        btn.classList.remove('btn-success');
-                        btn.classList.add('btn-primary');
-                    }, 1500);
-                } else {
-                    alert('保存失败: ' + result.message);
-                    btn.disabled = false;
-                    btn.innerHTML = originalText;
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert('保存出错');
-                btn.disabled = false;
-                btn.innerHTML = originalText;
-            });
-        }
-
-        function showError(msg) {
-            document.getElementById('loading').classList.add('d-none');
-            const errorDiv = document.getElementById('error-message');
-            errorDiv.textContent = msg;
-            errorDiv.classList.remove('d-none');
-        }
-
-        function generateAIComment() {
-            const btn = document.querySelector('button[onclick="generateAIComment()"]');
-            const originalText = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>生成中...';
-            
-            fetch('/api/ai-comment/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    student_id: currentStudentId,
-                    template_name: currentTemplateName
-                })
-            })
+    function loadData() {
+        fetch(`/api/score-entry/student-detail/${currentStudentId}?template_name=${encodeURIComponent(currentTemplateName)}`)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    alert('生成失败: ' + data.error);
-                } else {
-                    document.getElementById('ai-comment').value = data.comment;
+                    showError(data.error);
+                    return;
                 }
+                renderPage(data);
             })
             .catch(err => {
                 console.error(err);
-                alert('生成出错');
+                showError('加载失败');
+            });
+    }
+
+    function renderPage(data) {
+        // 1. Info
+        document.getElementById('student-name').textContent = data.student.name;
+        document.getElementById('student-id').textContent = data.student.student_id;
+        document.getElementById('template-name').textContent = data.student.template_name;
+
+        // 2. Navigation
+        navigationData = data.navigation;
+        document.getElementById('btn-prev').disabled = !data.navigation.prev_id;
+        document.getElementById('btn-next').disabled = !data.navigation.next_id;
+
+        // 3. Questions
+        const container = document.getElementById('questions-container');
+        let html = '';
+        
+        data.questions.forEach(q => {
+            const existingScore = data.scores[q.id] !== undefined ? data.scores[q.id] : '';
+            
+            html += `
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 question-card border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-2">
+                                <h6 class="card-title fw-bold">Q${q.number}</h6>
+                                <span class="badge bg-light text-dark border">${q.module}</span>
+                            </div>
+                            <div class="input-group">
+                                <input type="number" class="form-control score-input" 
+                                       name="q_${q.id}" 
+                                       id="q_${q.id}"
+                                       value="${existingScore}"
+                                       min="0" max="${q.score}" step="0.5"
+                                       placeholder="满分: ${q.score}">
+                                <span class="input-group-text text-muted small">/${q.score}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+
+        // 4. AI Comment
+        document.getElementById('ai-comment').value = data.ai_comment || '';
+
+        // Show UI
+        document.getElementById('loading').classList.add('d-none');
+        document.getElementById('form-container').classList.remove('d-none');
+        document.getElementById('action-bar').classList.remove('d-none');
+    }
+
+    function saveScores() {
+        const btn = document.getElementById('btn-save');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>保存中...';
+
+        const scores = {};
+        const inputs = document.querySelectorAll('.score-input');
+        
+        inputs.forEach(input => {
+            if (input.value.trim() !== '') {
+                const qId = input.id.replace('q_', '');
+                scores[qId] = parseFloat(input.value);
+            }
+        });
+
+        fetch('/api/score-entry/save', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                student_id: currentStudentId,
+                template_name: currentTemplateName,
+                scores: scores,
+                ai_comment: document.getElementById('ai-comment').value
             })
-            .finally(() => {
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                // Show success toast or simple alert
+                // alert('保存成功');
+                // Instead of alert, change button temporarily
+                btn.innerHTML = '<i class="fas fa-check me-1"></i> 保存成功';
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-success');
+                
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-primary');
+                }, 1500);
+            } else {
+                alert('保存失败: ' + result.message);
                 btn.disabled = false;
                 btn.innerHTML = originalText;
-            });
-        }
-    </script>
-</body>
-</html>
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('保存出错');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+
+    function showError(msg) {
+        document.getElementById('loading').classList.add('d-none');
+        const errorDiv = document.getElementById('error-message');
+        errorDiv.textContent = msg;
+        errorDiv.classList.remove('d-none');
+    }
+
+    function generateAIComment() {
+        const btn = document.querySelector('button[onclick="generateAIComment()"]');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>生成中...';
+        
+        fetch('/api/ai-comment/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                student_id: currentStudentId,
+                template_name: currentTemplateName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('生成失败: ' + data.error);
+            } else {
+                document.getElementById('ai-comment').value = data.comment;
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('生成出错');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+</script>
+{% endblock %}

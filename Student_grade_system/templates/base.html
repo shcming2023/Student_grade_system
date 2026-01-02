@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}橡心国际WTF活动管理平台{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Mobile Navigation (Visible on < LG) -->
+    {% block mobile_nav %}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf d-lg-none">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-graduation-cap me-2"></i>WTF管理平台
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home"></i> 首页</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> 仪表板</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'data_management' %}active{% endif %}" href="{{ url_for('data_management') }}"><i class="fas fa-database"></i> 数据管理</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'exam_sessions' %}active{% endif %}" href="{{ url_for('exam_sessions') }}"><i class="fas fa-calendar-alt"></i> 考试管理</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'exam_templates' %}active{% endif %}" href="{{ url_for('exam_templates') }}"><i class="fas fa-file-signature"></i> 试卷管理</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'students' %}active{% endif %}" href="{{ url_for('students') }}"><i class="fas fa-user-graduate"></i> 考生管理</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'registration' %}active{% endif %}" href="{{ url_for('registration') }}"><i class="fas fa-clipboard-check"></i> 报考管理</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'score_entry_dashboard' %}active{% endif %}" href="{{ url_for('score_entry_dashboard') }}"><i class="fas fa-edit"></i> 评分录入</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'report_cards' %}active{% endif %}" href="{{ url_for('report_cards') }}"><i class="fas fa-file-alt"></i> 成绩单</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'statistics' %}active{% endif %}" href="{{ url_for('statistics') }}"><i class="fas fa-chart-bar"></i> 统计报表</a></li>
+                    {% if session.get('role') == 'admin' %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'teachers_page' %}active{% endif %}" href="{{ url_for('teachers_page') }}"><i class="fas fa-chalkboard-teacher"></i> 教师管理</a></li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> 注销</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endblock %}
+
+    <!-- Desktop Sidebar (Visible on >= LG) -->
+    <div class="d-flex" id="wrapper">
+        <div class="bg-wtf border-end d-none d-lg-block text-white" id="sidebar-wrapper" style="width: 260px; min-height: 100vh; position: fixed; top: 0; left: 0; z-index: 1000;">
+            <div class="sidebar-heading text-center py-4 fs-4 fw-bold border-bottom border-light">
+                <i class="fas fa-graduation-cap me-2"></i>WTF System
+            </div>
+            <div class="list-group list-group-flush my-3 px-2">
+                <a href="{{ url_for('index') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'index' %}active text-white{% endif %}"><i class="fas fa-home me-3"></i>首页</a>
+                <a href="{{ url_for('dashboard') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'dashboard' %}active text-white{% endif %}"><i class="fas fa-tachometer-alt me-3"></i>仪表板</a>
+                <a href="{{ url_for('data_management') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'data_management' %}active text-white{% endif %}"><i class="fas fa-database me-3"></i>数据管理</a>
+                
+                <div class="text-uppercase small fw-bold text-white-50 mt-3 mb-1 px-3">业务管理</div>
+                <a href="{{ url_for('exam_sessions') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'exam_sessions' %}active text-white{% endif %}"><i class="fas fa-calendar-alt me-3"></i>考试管理</a>
+                <a href="{{ url_for('exam_templates') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'exam_templates' %}active text-white{% endif %}"><i class="fas fa-file-signature me-3"></i>试卷管理</a>
+                <a href="{{ url_for('students') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'students' %}active text-white{% endif %}"><i class="fas fa-user-graduate me-3"></i>考生管理</a>
+                <a href="{{ url_for('registration') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'registration' %}active text-white{% endif %}"><i class="fas fa-clipboard-check me-3"></i>报考管理</a>
+                
+                <div class="text-uppercase small fw-bold text-white-50 mt-3 mb-1 px-3">成绩与报表</div>
+                <a href="{{ url_for('score_entry_dashboard') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'score_entry_dashboard' %}active text-white{% endif %}"><i class="fas fa-edit me-3"></i>评分录入</a>
+                <a href="{{ url_for('report_cards') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'report_cards' %}active text-white{% endif %}"><i class="fas fa-file-alt me-3"></i>成绩单</a>
+                <a href="{{ url_for('statistics') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'statistics' %}active text-white{% endif %}"><i class="fas fa-chart-bar me-3"></i>统计报表</a>
+                
+                {% if session.get('role') == 'admin' %}
+                <div class="text-uppercase small fw-bold text-white-50 mt-3 mb-1 px-3">系统管理</div>
+                <a href="{{ url_for('teachers_page') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'teachers_page' %}active text-white{% endif %}"><i class="fas fa-chalkboard-teacher me-3"></i>教师管理</a>
+                {% endif %}
+                
+                <div class="mt-4 border-top border-light pt-3">
+                    <a href="{{ url_for('logout') }}" class="list-group-item list-group-item-action bg-transparent text-white-50"><i class="fas fa-sign-out-alt me-3"></i>注销</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page Content Wrapper -->
+        <div id="page-content-wrapper" class="w-100" style="margin-left: 0;">
+            <!-- PC Header (optional, for breadcrumbs or title) -->
+            <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom d-none d-lg-flex px-4 shadow-sm">
+                 <span class="navbar-text">
+                    <i class="fas fa-user-circle me-1"></i> Welcome, <strong>{{ session.get('username', 'Teacher') }}</strong>
+                 </span>
+            </nav>
+
+            <div class="container-fluid {% block content_class %}p-4{% endblock %} main-content-container">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

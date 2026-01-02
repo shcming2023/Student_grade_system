@@ -5,7 +5,7 @@
 橡心国际WTF活动管理平台 - 简化版本
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for, flash, make_response
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect
 from datetime import datetime, date
@@ -175,12 +175,18 @@ class Subject(db.Model):
             'total_score': self.total_score
         }
 
+exam_template_sessions = db.Table('exam_template_sessions',
+    db.Column('exam_template_id', db.Integer, db.ForeignKey('exam_templates.id'), primary_key=True),
+    db.Column('exam_session_id', db.Integer, db.ForeignKey('exam_sessions.id'), primary_key=True)
+)
+
 class ExamTemplate(db.Model):
     __tablename__ = 'exam_templates'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'))
-    exam_session_id = db.Column(db.Integer, db.ForeignKey('exam_sessions.id'))  # Added link to session
+    # exam_session_id = db.Column(db.Integer, db.ForeignKey('exam_sessions.id'))  # Deprecated
+    exam_session_id = db.Column(db.Integer, nullable=True) # Keep for backward compatibility/DB schema matching but unused
     grade_level = db.Column(db.String(10), nullable=False)
     total_questions = db.Column(db.Integer, nullable=False)
     
@@ -189,7 +195,10 @@ class ExamTemplate(db.Model):
     grader_id = db.Column(db.Integer, db.ForeignKey('users.id'))
 
     subject = db.relationship('Subject', backref='templates')
-    exam_session = db.relationship('ExamSession', backref='templates')
+    # exam_session = db.relationship('ExamSession', backref='templates') # Deprecated
+    sessions = db.relationship('ExamSession', secondary=exam_template_sessions, lazy='subquery',
+        backref=db.backref('templates', lazy=True))
+    
     creator = db.relationship('User', foreign_keys=[creator_id], backref='created_templates')
     grader = db.relationship('User', foreign_keys=[grader_id], backref='graded_templates')
 
@@ -199,8 +208,8 @@ class ExamTemplate(db.Model):
             'name': self.name,
             'subject_id': self.subject_id,
             'subject_name': self.subject.name if self.subject else None,
-            'exam_session_id': self.exam_session_id,
-            'exam_session_name': self.exam_session.name if self.exam_session else None,
+            'session_ids': [s.id for s in self.sessions],
+            'session_names': [s.name for s in self.sessions],
             'grade_level': self.grade_level,
             'total_questions': self.total_questions,
             'creator_id': self.creator_id,
@@ -217,8 +226,10 @@ class ExamRegistration(db.Model):
     exam_template_id = db.Column(db.Integer, db.ForeignKey('exam_templates.id'))
     registration_date = db.Column(db.DateTime, default=datetime.utcnow)
     attendance_status = db.Column(db.String(20))  # present/absent
+    score = db.Column(db.Float)
+    status = db.Column(db.String(20))
     
-    student = db.relationship('Student')
+    student = db.relationship('Student', backref='registrations')
     exam_session = db.relationship('ExamSession')
     exam_template = db.relationship('ExamTemplate')
 
@@ -329,10 +340,13 @@ def settings():
 # Context processor to inject settings into all templates
 @app.context_processor
 def inject_settings():
-    setting = SystemSetting.query.first()
-    if not setting:
+    try:
+        setting = SystemSetting.query.first()
+        if not setting:
+            return dict(system_setting={'company_name': 'Way To Future IV', 'company_name_zh': '橡心国际'})
+        return dict(system_setting=setting.to_dict())
+    except:
         return dict(system_setting={'company_name': 'Way To Future IV', 'company_name_zh': '橡心国际'})
-    return dict(system_setting=setting.to_dict())
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -392,8 +406,24 @@ def dashboard():
 @app.route('/exam-sessions')
 def exam_sessions():
     """考试场次管理"""
-    sessions = ExamSession.query.order_by(ExamSession.exam_date.desc()).all()
-    return render_template('exam_sessions.html', sessions=sessions)
+    page = request.args.get('page', 1, type=int)
+    search_query = request.args.get('search', '')
+    
+    query = ExamSession.query
+    
+    if search_query:
+        query = query.filter(ExamSession.name.contains(search_query))
+        
+    pagination = query.order_by(ExamSession.exam_date.desc()).paginate(
+        page=page, per_page=10, error_out=False
+    )
+    
+    sessions = pagination.items
+    
+    return render_template('exam_sessions.html', 
+                           sessions=sessions, 
+                           pagination=pagination,
+                           search_query=search_query)
 
 @app.route('/students')
 @login_required
@@ -688,26 +718,21 @@ def api_score_entry_students():
     user_id = session.get('user_id')
     role = session.get('role')
     
-    print(f"[DEBUG] api_score_entry_students: name='{template_name}', user_id={user_id}, role='{role}'")
-    
+    # Debug info removed
     if not template_name:
-        return jsonify({'error': 'Missing template_name'}), 400
+        return jsonify({'error': 'Missing template name'}), 400
         
     # 1. Find all template IDs with this name (and permission check)
     query_templates = ExamTemplate.query.filter_by(name=template_name)
     
     # If not admin, filter by grader_id
     if role != 'admin':
-        print(f"[DEBUG] Filtering templates by grader_id={user_id}")
         query_templates = query_templates.filter_by(grader_id=user_id)
         
     templates = query_templates.all()
     template_ids = [t.id for t in templates]
     
-    print(f"[DEBUG] Found templates: {len(templates)}, IDs: {template_ids}")
-    
     if not template_ids:
-        print("[DEBUG] No templates found matching criteria.")
         return jsonify([])
         
     try:
@@ -721,7 +746,6 @@ def api_score_entry_students():
          .order_by(ExamSession.exam_date, Student.student_id)
          
         registrations = query.all()
-        print(f"[DEBUG] Found registrations: {len(registrations)}")
          
         # 3. Check scoring status for each student
         results = []
@@ -1659,7 +1683,6 @@ def api_generate_ai_comment():
 
 def generate_report_card_pdf(student_id, exam_session_id, template_id=None):
     """生成学生成绩单PDF - Refactored v9 (Compact Layout)"""
-    print(f"DEBUG: Generating PDF for student {student_id}, session {exam_session_id}, template {template_id} - NEW LOGIC v9")
     try:
         # 注册中文字体
         try:
@@ -2322,6 +2345,47 @@ def api_create_student():
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/students/registration-options')
+@login_required
+def api_student_registration_options():
+    sessions = ExamSession.query.order_by(ExamSession.exam_date.desc()).all()
+    result = []
+    
+    for s in sessions:
+        # Use the backref 'templates' from the M2M relationship
+        s_templates = s.templates
+        
+        templates_data = [{
+            'id': t.id,
+            'name': t.name,
+            'subject_name': t.subject.name if t.subject else ''
+        } for t in s_templates]
+        
+        result.append({
+            'id': s.id,
+            'name': s.name,
+            'templates': templates_data
+        })
+        
+    return jsonify(result)
+
+@app.route('/api/students/<int:id>', methods=['GET'])
+@login_required
+def api_get_student_detail(id):
+    student = Student.query.get_or_404(id)
+    regs = []
+    for r in student.registrations:
+        regs.append({
+            'session_id': r.exam_session_id,
+            'template_id': r.exam_template_id,
+            'session_name': r.exam_session.name if r.exam_session else '',
+            'template_name': r.exam_template.name if r.exam_template else ''
+        })
+    
+    data = student.to_dict()
+    data['registrations'] = regs
+    return jsonify(data)
+
 @app.route('/api/students/<int:id>', methods=['PUT'])
 @login_required
 def api_update_student(id):
@@ -2352,6 +2416,46 @@ def api_update_student(id):
                  db.session.add(school)
                  db.session.commit()
             student.school_id = school.id
+            
+        # Handle Registrations
+        if 'registrations' in data:
+            # Expected format: [{'session_id': 1, 'template_ids': [1, 2]}, ...]
+            new_regs = set()
+            for item in data['registrations']:
+                s_id = int(item['session_id'])
+                for t_id in item.get('template_ids', []):
+                    new_regs.add((s_id, int(t_id)))
+            
+            # Get current regs
+            current_regs = ExamRegistration.query.filter_by(student_id=student.id).all()
+            current_map = {(r.exam_session_id, r.exam_template_id): r for r in current_regs}
+            current_keys = set(current_map.keys())
+            
+            to_add = new_regs - current_keys
+            to_remove = current_keys - new_regs
+            
+            # Remove (only if no scores)
+            for key in to_remove:
+                reg = current_map[key]
+                # Check for scores
+                has_scores = Score.query.join(Question).filter(
+                    Score.student_id == student.id,
+                    Question.exam_template_id == reg.exam_template_id
+                ).first()
+                
+                if not has_scores:
+                    db.session.delete(reg)
+            
+            # Add
+            for s_id, t_id in to_add:
+                new_reg = ExamRegistration(
+                    student_id=student.id,
+                    exam_session_id=s_id,
+                    exam_template_id=t_id,
+                    attendance_status='present',
+                    status='registered'
+                )
+                db.session.add(new_reg)
                 
         db.session.commit()
         return jsonify({'success': True, 'message': '学生信息更新成功'})
@@ -2654,14 +2758,13 @@ def exam_templates():
 @login_required
 def api_get_exam_templates():
     """获取所有试卷模板 (包含场次信息和报名统计)"""
-    # Join with ExamSession and Subject
-    results = db.session.query(ExamTemplate, Subject, ExamSession)\
+    # Join with Subject only
+    results = db.session.query(ExamTemplate, Subject)\
         .join(Subject, ExamTemplate.subject_id == Subject.id)\
-        .outerjoin(ExamSession, ExamTemplate.exam_session_id == ExamSession.id)\
         .all()
     
     data = []
-    for template, subject, session in results:
+    for template, subject in results:
         # Get registration count
         reg_count = ExamRegistration.query.filter_by(exam_template_id=template.id).count()
         
@@ -2670,15 +2773,21 @@ def api_get_exam_templates():
         item['subject_name'] = subject.name
         item['reg_count'] = reg_count
         
-        if session:
-            item['session_name'] = session.name
-            item['session_date'] = session.exam_date.strftime('%Y-%m-%d') if session.exam_date else ''
-            item['session_type'] = session.session_type
-            item['session_type_cn'] = '上午' if session.session_type == 'morning' else '下午'
+        # Handle multiple sessions
+        if template.sessions:
+            item['session_name'] = ', '.join([s.name for s in template.sessions])
+            # For date and type, we just show the first one or a summary to avoid clutter
+            first_session = template.sessions[0]
+            item['session_date'] = first_session.exam_date.strftime('%Y-%m-%d') if first_session.exam_date else ''
+            item['session_type'] = first_session.session_type
+            item['session_type_cn'] = '上午' if first_session.session_type == 'morning' else '下午'
+            if len(template.sessions) > 1:
+                item['session_date'] += ' 等'
         else:
             item['session_name'] = '未分配场次'
             item['session_date'] = ''
             item['session_type'] = ''
+            item['session_type_cn'] = ''
             
         data.append(item)
         
@@ -2772,12 +2881,26 @@ def api_create_exam_template():
         new_template = ExamTemplate(
             name=data['name'],
             subject_id=data['subject_id'],
-            exam_session_id=data.get('exam_session_id'),
             grade_level=data['grade_level'],
             total_questions=data.get('total_questions', 0),
             creator_id=data.get('creator_id'),
             grader_id=data.get('grader_id')
         )
+        
+        # Handle sessions (M2M)
+        if 'session_ids' in data and data['session_ids']:
+            sessions = ExamSession.query.filter(ExamSession.id.in_(data['session_ids'])).all()
+            new_template.sessions = sessions
+            # Backward compatibility
+            if sessions:
+                new_template.exam_session_id = sessions[0].id
+        elif 'exam_session_id' in data and data['exam_session_id']:
+            # Fallback for legacy single session
+            session = ExamSession.query.get(data['exam_session_id'])
+            if session:
+                new_template.sessions = [session]
+                new_template.exam_session_id = session.id
+        
         db.session.add(new_template)
         db.session.commit()
         return jsonify({'success': True, 'message': '试卷模板创建成功', 'template': new_template.to_dict()})
@@ -2794,8 +2917,27 @@ def api_update_exam_template(id):
         template.name = data['name']
         template.subject_id = data['subject_id']
         template.grade_level = data['grade_level']
-        if 'exam_session_id' in data:
-            template.exam_session_id = data['exam_session_id']
+        
+        # Handle sessions (M2M)
+        if 'session_ids' in data:
+            sessions = ExamSession.query.filter(ExamSession.id.in_(data['session_ids'])).all()
+            template.sessions = sessions
+            # Backward compatibility
+            if sessions:
+                template.exam_session_id = sessions[0].id
+            else:
+                template.exam_session_id = None
+        elif 'exam_session_id' in data:
+            # Fallback for legacy single session update
+            if data['exam_session_id']:
+                session = ExamSession.query.get(data['exam_session_id'])
+                if session:
+                    template.sessions = [session]
+                    template.exam_session_id = session.id
+            else:
+                template.sessions = []
+                template.exam_session_id = None
+
         # total_questions might be auto-calc, but allow edit
         if 'total_questions' in data:
             template.total_questions = data['total_questions']
@@ -3053,6 +3195,16 @@ def create_tables():
             if 'real_name' not in columns_users:
                 print("Migrating: Adding real_name to users")
                 conn.execute('ALTER TABLE users ADD COLUMN real_name VARCHAR(50)')
+
+        # Check exam_registrations columns
+        columns_regs = [c['name'] for c in inspector.get_columns('exam_registrations')]
+        with db.engine.connect() as conn:
+            if 'score' not in columns_regs:
+                print("Migrating: Adding score to exam_registrations")
+                conn.execute('ALTER TABLE exam_registrations ADD COLUMN score FLOAT')
+            if 'status' not in columns_regs:
+                print("Migrating: Adding status to exam_registrations")
+                conn.execute('ALTER TABLE exam_registrations ADD COLUMN status VARCHAR(20)')
                 
     except Exception as e:
         print(f"Migration check failed: {e}")
@@ -3223,6 +3375,448 @@ def create_initial_data():
     
     db.session.add(exam_session)
     db.session.commit()
+
+
+# --- Exam Session Form Handlers (PC View) ---
+@app.route('/exam-sessions/add', methods=['POST'])
+@login_required
+def handle_exam_add():
+    name = request.form.get('name')
+    date_str = request.form.get('date')
+    
+    try:
+        exam_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        # Create with defaults
+        new_session = ExamSession(
+            name=name,
+            exam_date=exam_date,
+            session_type='morning', # Default
+            start_time='09:00',
+            end_time='11:00',
+            status='draft'
+        )
+        db.session.add(new_session)
+        db.session.commit()
+        flash('考试场次创建成功', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'创建失败: {str(e)}', 'danger')
+        
+    return redirect(url_for('exam_sessions'))
+
+@app.route('/exam-sessions/edit', methods=['POST'])
+@login_required
+def handle_exam_edit():
+    exam_id = request.form.get('exam_id')
+    name = request.form.get('name')
+    date_str = request.form.get('date')
+    
+    session = ExamSession.query.get_or_404(exam_id)
+    try:
+        session.name = name
+        session.exam_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        db.session.commit()
+        flash('考试场次更新成功', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'更新失败: {str(e)}', 'danger')
+        
+    return redirect(url_for('exam_sessions'))
+
+@app.route('/exam-sessions/delete', methods=['POST'])
+@login_required
+def handle_exam_delete():
+    exam_id = request.form.get('exam_id')
+    session = ExamSession.query.get_or_404(exam_id)
+    try:
+        # Check registrations
+        if ExamRegistration.query.filter_by(exam_session_id=exam_id).first():
+            flash('无法删除：该考试已有学生报名', 'danger')
+        else:
+            db.session.delete(session)
+            db.session.commit()
+            flash('考试场次已删除', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'删除失败: {str(e)}', 'danger')
+        
+    return redirect(url_for('exam_sessions'))
+
+# --- Data Management & Import/Export ---
+
+@app.route('/data/management')
+@login_required
+def data_management():
+    """数据管理页面"""
+    return render_template('data_management.html')
+
+@app.route('/data/import/exams', methods=['POST'])
+@login_required
+def import_exams():
+    if 'file' not in request.files:
+        flash('未找到文件', 'danger')
+        return redirect(url_for('data_management'))
+    file = request.files['file']
+    if file.filename == '':
+        flash('未选择文件', 'danger')
+        return redirect(url_for('data_management'))
+    
+    try:
+        df = pd.read_excel(file)
+        success_count = 0
+        for _, row in df.iterrows():
+            try:
+                name = row.get('名称') or row.get('name')
+                date_val = row.get('日期') or row.get('date')
+                if not name: continue
+                
+                # Check exist
+                if ExamSession.query.filter_by(name=name).first():
+                    continue
+                
+                exam_date = pd.to_datetime(date_val).date() if date_val else date.today()
+                
+                session = ExamSession(
+                    name=name,
+                    exam_date=exam_date,
+                    status='draft'
+                )
+                db.session.add(session)
+                success_count += 1
+            except:
+                continue
+        db.session.commit()
+        flash(f'成功导入 {success_count} 条考试记录', 'success')
+    except Exception as e:
+        flash(f'导入失败: {str(e)}', 'danger')
+    return redirect(url_for('data_management'))
+
+@app.route('/data/import/templates', methods=['POST'])
+@login_required
+def import_templates():
+    if 'file' not in request.files:
+        flash('未找到文件', 'danger')
+        return redirect(url_for('data_management'))
+    file = request.files['file']
+    
+    try:
+        df = pd.read_excel(file)
+        success_count = 0
+        for _, row in df.iterrows():
+            try:
+                name = row.get('模板名称') or row.get('name')
+                subject_code = row.get('科目代码') or row.get('subject_code')
+                grade = row.get('年级') or row.get('grade')
+                
+                if not name or not subject_code: continue
+                
+                subject = Subject.query.filter_by(code=subject_code).first()
+                if not subject: continue
+                
+                if ExamTemplate.query.filter_by(name=name).first():
+                    continue
+                    
+                template = ExamTemplate(
+                    name=name,
+                    subject_id=subject.id,
+                    grade_level=grade,
+                    total_questions=int(row.get('题目数', 0))
+                )
+                db.session.add(template)
+                success_count += 1
+            except:
+                continue
+        db.session.commit()
+        flash(f'成功导入 {success_count} 个模板', 'success')
+    except Exception as e:
+        flash(f'导入失败: {str(e)}', 'danger')
+    return redirect(url_for('data_management'))
+
+@app.route('/data/import/students', methods=['POST'])
+@login_required
+def import_students():
+    if 'file' not in request.files:
+        flash('未找到文件', 'danger')
+        return redirect(url_for('data_management'))
+    file = request.files['file']
+    
+    try:
+        df = pd.read_excel(file)
+        success_count = 0
+        for _, row in df.iterrows():
+            try:
+                name = row.get('姓名') or row.get('name')
+                student_id = str(row.get('学号') or row.get('student_id'))
+                
+                if not name or not student_id: continue
+                
+                if Student.query.filter_by(student_id=student_id).first():
+                    continue
+                
+                student = Student(
+                    name=name,
+                    student_id=student_id,
+                    grade_level=row.get('年级') or row.get('grade'),
+                    school_name=row.get('学校') or row.get('school')
+                )
+                db.session.add(student)
+                success_count += 1
+            except:
+                continue
+        db.session.commit()
+        flash(f'成功导入 {success_count} 名学生', 'success')
+    except Exception as e:
+        flash(f'导入失败: {str(e)}', 'danger')
+    return redirect(url_for('data_management'))
+
+@app.route('/data/import/scores', methods=['POST'])
+@login_required
+def import_scores():
+    if 'file' not in request.files:
+        flash('未找到文件', 'danger')
+        return redirect(url_for('data_management'))
+    file = request.files['file']
+    
+    try:
+        df = pd.read_excel(file)
+        success_count = 0
+        for _, row in df.iterrows():
+            try:
+                student_id = str(row.get('学号') or row.get('student_id'))
+                template_name = row.get('试卷名称') or row.get('template_name')
+                score_val = row.get('得分') or row.get('score')
+                
+                student = Student.query.filter_by(student_id=student_id).first()
+                template = ExamTemplate.query.filter_by(name=template_name).first()
+                
+                if not student or not template: continue
+                
+                # Check registration
+                reg = ExamRegistration.query.filter_by(
+                    student_id=student.id,
+                    exam_template_id=template.id
+                ).first()
+                
+                if not reg:
+                    if template.exam_session_id:
+                        reg = ExamRegistration(
+                            student_id=student.id,
+                            exam_template_id=template.id,
+                            exam_session_id=template.exam_session_id,
+                            status='completed'
+                        )
+                        db.session.add(reg)
+                        db.session.flush()
+                    else:
+                        continue
+
+                reg.score = float(score_val)
+                reg.status = 'completed'
+                success_count += 1
+            except:
+                continue
+        db.session.commit()
+        flash(f'成功导入 {success_count} 条成绩', 'success')
+    except Exception as e:
+        flash(f'导入失败: {str(e)}', 'danger')
+    return redirect(url_for('data_management'))
+
+@app.route('/data/export/all')
+@login_required
+def export_all_data():
+    """一键全量导出备份"""
+    try:
+        # 1. Exams
+        sessions = ExamSession.query.all()
+        df_exams = pd.DataFrame([{
+            '名称': s.name, 
+            '日期': s.exam_date, 
+            '状态': s.status,
+            '类型': s.session_type,
+            '开始时间': s.start_time,
+            '结束时间': s.end_time
+        } for s in sessions])
+        
+        # 2. Templates
+        templates = ExamTemplate.query.all()
+        df_templates = pd.DataFrame([{
+            '模板名称': t.name, 
+            '科目': t.subject.name if t.subject else '', 
+            '年级': t.grade_level, 
+            '题目数': t.total_questions
+        } for t in templates])
+
+        # 2.1 Questions (Added)
+        questions = Question.query.all()
+        df_questions = pd.DataFrame([{
+            '试卷名称': q.exam_template.name if q.exam_template else '',
+            '题号': q.question_number,
+            '模块': q.module,
+            '知识点': q.knowledge_point,
+            '题型': getattr(q, 'question_type', ''), # Handle potential missing attribute
+            '分值': q.score
+        } for q in questions])
+        
+        # 3. Students (Enhanced)
+        students = Student.query.all()
+        student_data = []
+        for s in students:
+            # Get registrations info
+            regs = ExamRegistration.query.filter_by(student_id=s.id).all()
+            reg_details = []
+            for r in regs:
+                t_name = r.exam_template.name if r.exam_template else 'Unknown'
+                s_name = r.exam_session.name if r.exam_session else 'Unknown'
+                reg_details.append(f"{s_name} ({t_name})")
+            reg_str = "; ".join(reg_details)
+
+            student_data.append({
+                '姓名': s.name, 
+                '学号': s.student_id, 
+                '年级': s.grade_level, 
+                '学校': s.school.name if s.school else '',
+                '报考详情': reg_str
+            })
+        df_students = pd.DataFrame(student_data)
+        
+        # 4. Scores
+        regs = ExamRegistration.query.filter(ExamRegistration.score != None).all()
+        scores_data = []
+        for r in regs:
+            if r.student and r.exam_template:
+                scores_data.append({
+                    '学号': r.student.student_id,
+                    '姓名': r.student.name,
+                    '试卷名称': r.exam_template.name,
+                    '得分': r.score
+                })
+        df_scores = pd.DataFrame(scores_data)
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            if not df_exams.empty:
+                df_exams.to_excel(writer, sheet_name='考试场次', index=False)
+            if not df_templates.empty:
+                df_templates.to_excel(writer, sheet_name='试卷模板', index=False)
+            if not df_questions.empty:
+                df_questions.to_excel(writer, sheet_name='题目明细', index=False)
+            if not df_students.empty:
+                df_students.to_excel(writer, sheet_name='考生信息', index=False)
+            if not df_scores.empty:
+                df_scores.to_excel(writer, sheet_name='评分记录', index=False)
+            
+        output.seek(0)
+        filename = f"System_Backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return send_file(output, download_name=filename, as_attachment=True)
+    except Exception as e:
+        flash(f'备份失败: {str(e)}', 'danger')
+        return redirect(url_for('data_management'))
+
+@app.route('/data/export/exams')
+@login_required
+def export_exams():
+    try:
+        sessions = ExamSession.query.all()
+        data = [{'名称': s.name, '日期': s.exam_date, '状态': s.status} for s in sessions]
+        df = pd.DataFrame(data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+        output.seek(0)
+        return send_file(output, download_name='exams.xlsx', as_attachment=True)
+    except Exception as e:
+        flash(f'导出失败: {str(e)}', 'danger')
+        return redirect(url_for('data_management'))
+
+@app.route('/data/export/templates')
+@login_required
+def export_templates():
+    try:
+        templates = ExamTemplate.query.all()
+        # Sheet 1: Templates
+        t_data = [{'模板名称': t.name, '科目': t.subject.name if t.subject else '', '年级': t.grade_level, '题目数': t.total_questions} for t in templates]
+        df_templates = pd.DataFrame(t_data)
+
+        # Sheet 2: Questions
+        q_data = []
+        for t in templates:
+            questions = Question.query.filter_by(exam_template_id=t.id).order_by(Question.question_number).all()
+            for q in questions:
+                q_data.append({
+                    '试卷名称': t.name,
+                    '题号': q.question_number,
+                    '模块': q.module,
+                    '知识点': q.knowledge_point,
+                    '分值': q.score
+                })
+        df_questions = pd.DataFrame(q_data)
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_templates.to_excel(writer, sheet_name='试卷列表', index=False)
+            df_questions.to_excel(writer, sheet_name='题目明细', index=False)
+        output.seek(0)
+        return send_file(output, download_name='templates_with_details.xlsx', as_attachment=True)
+    except Exception as e:
+        flash(f'导出失败: {str(e)}', 'danger')
+        return redirect(url_for('data_management'))
+
+@app.route('/data/export/students')
+@login_required
+def export_students():
+    try:
+        students = Student.query.all()
+        data = []
+        for s in students:
+            # Get registrations info
+            regs = ExamRegistration.query.filter_by(student_id=s.id).all()
+            reg_details = []
+            for r in regs:
+                t_name = r.exam_template.name if r.exam_template else 'Unknown'
+                s_name = r.exam_session.name if r.exam_session else 'Unknown'
+                reg_details.append(f"{s_name} ({t_name})")
+            reg_str = "; ".join(reg_details)
+
+            data.append({
+                '姓名': s.name, 
+                '学号': s.student_id, 
+                '年级': s.grade_level, 
+                '学校': s.school.name if s.school else '',
+                '报考详情': reg_str
+            })
+        df = pd.DataFrame(data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+        output.seek(0)
+        return send_file(output, download_name='students_with_details.xlsx', as_attachment=True)
+    except Exception as e:
+        flash(f'导出失败: {str(e)}', 'danger')
+        return redirect(url_for('data_management'))
+
+@app.route('/data/export/scores')
+@login_required
+def export_scores():
+    try:
+        regs = ExamRegistration.query.filter(ExamRegistration.score != None).all()
+        data = []
+        for r in regs:
+            if r.student and r.exam_template:
+                data.append({
+                    '学号': r.student.student_id,
+                    '姓名': r.student.name,
+                    '试卷名称': r.exam_template.name,
+                    '得分': r.score
+                })
+        df = pd.DataFrame(data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+        output.seek(0)
+        return send_file(output, download_name='scores.xlsx', as_attachment=True)
+    except Exception as e:
+        flash(f'导出失败: {str(e)}', 'danger')
+        return redirect(url_for('data_management'))
 
 if __name__ == '__main__':
     # 运行应用

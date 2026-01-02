@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}数据管理 - 橡心国际WTF活动管理平台{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2"><i class="fas fa-database me-2 text-wtf"></i>数据管理</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <a href="{{ url_for('export_all_data') }}" class="btn btn-primary">
+                <i class="fas fa-cloud-download-alt me-2"></i>一键全量导出备份
+            </a>
+        </div>
+    </div>
+    
+    <div class="alert alert-info shadow-sm" role="alert">
+        <h5 class="alert-heading"><i class="fas fa-info-circle me-2"></i>数据导入操作指引</h5>
+        <p class="mb-0">为了保证数据完整性，请务必按照以下顺序进行数据导入：</p>
+        <ol class="mb-0 mt-2">
+            <li><strong>考试场次 (Exam Sessions)</strong>：确立考试的时间、地点等基础信息。</li>
+            <li><strong>试卷模板 (Exam Templates)</strong>：关联具体的考试场次，定义题目结构。（依赖：考试场次）</li>
+            <li><strong>考生信息 (Students)</strong>：建立考生的基本档案。</li>
+            <li><strong>评分记录 (Scores)</strong>：录入考生的具体得分。（依赖：考生信息 + 试卷模板）</li>
+        </ol>
+    </div>
+
+    <div class="row g-4">
+        <!-- 1. 考试场次 (Exams) -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-left-primary">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0 text-primary"><i class="fas fa-calendar-alt me-2"></i>1. 考试场次导入</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">导入包含名称、日期、类型等信息的 Excel 文件。</p>
+                    <form action="{{ url_for('import_exams') }}" method="post" enctype="multipart/form-data">
+                        <div class="input-group">
+                            <input type="file" class="form-control" name="file" accept=".xlsx" required>
+                            <button class="btn btn-primary" type="submit">导入</button>
+                        </div>
+                    </form>
+                    <div class="mt-3 border-top pt-3">
+                        <a href="{{ url_for('export_exams') }}" class="btn btn-outline-primary btn-sm w-100">
+                            <i class="fas fa-file-export me-1"></i>导出考试数据
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 试卷模板 (Templates) -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-left-success">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0 text-success"><i class="fas fa-file-signature me-2"></i>2. 试卷模板导入</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">需包含题目详情及关联的“考试场次名称”。</p>
+                    <form action="{{ url_for('import_templates') }}" method="post" enctype="multipart/form-data">
+                        <div class="input-group">
+                            <input type="file" class="form-control" name="file" accept=".xlsx" required>
+                            <button class="btn btn-success" type="submit">导入</button>
+                        </div>
+                    </form>
+                    <div class="mt-3 border-top pt-3">
+                        <a href="{{ url_for('export_templates') }}" class="btn btn-outline-success btn-sm w-100">
+                            <i class="fas fa-file-export me-1"></i>导出试卷模板
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 考生信息 (Students) -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-left-info">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0 text-info"><i class="fas fa-user-graduate me-2"></i>3. 考生信息导入</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">导入学生基础档案（学号、姓名、学校等）。</p>
+                    <form action="{{ url_for('import_students') }}" method="post" enctype="multipart/form-data">
+                        <div class="input-group">
+                            <input type="file" class="form-control" name="file" accept=".xlsx" required>
+                            <button class="btn btn-info text-white" type="submit">导入</button>
+                        </div>
+                    </form>
+                    <div class="mt-3 border-top pt-3">
+                        <a href="{{ url_for('export_students') }}" class="btn btn-outline-info btn-sm w-100">
+                            <i class="fas fa-file-export me-1"></i>导出考生信息
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. 评分记录 (Scores) -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-left-warning">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0 text-warning"><i class="fas fa-star me-2"></i>4. 评分记录导入</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">需确保考生和试卷模板已存在。匹配学号和试卷名。</p>
+                    <form action="{{ url_for('import_scores') }}" method="post" enctype="multipart/form-data">
+                        <div class="input-group">
+                            <input type="file" class="form-control" name="file" accept=".xlsx" required>
+                            <button class="btn btn-warning text-white" type="submit">导入</button>
+                        </div>
+                    </form>
+                    <div class="mt-3 border-top pt-3">
+                        <a href="{{ url_for('export_scores') }}" class="btn btn-outline-warning btn-sm w-100">
+                            <i class="fas fa-file-export me-1"></i>导出评分记录
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+        .border-left-primary { border-left: 4px solid #4e73df !important; }
+        .border-left-success { border-left: 4px solid #1cc88a !important; }
+        .border-left-info { border-left: 4px solid #36b9cc !important; }
+        .border-left-warning { border-left: 4px solid #f6c23e !important; }
+    </style>
+{% endblock %}

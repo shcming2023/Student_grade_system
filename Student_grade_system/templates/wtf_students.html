@@ -1,147 +1,79 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>考生管理 - 橡心国际WTF</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="{{ url_for('static', filename='css/wtf_style.css') }}" rel="stylesheet">
-</head>
-<body>
-    <!-- 导航栏 -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-wtf">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('index') }}">
-                <i class="fas fa-graduation-cap me-2"></i>橡心国际WTF管理平台
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
+{% extends "base.html" %}
+
+{% block title %}考生管理 - 橡心国际WTF活动管理平台{% endblock %}
+
+{% block content %}
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h2><i class="fas fa-user-graduate me-2 text-wtf"></i>考生管理</h2>
+        </div>
+        <div class="col-md-6 text-end">
+            <button class="btn btn-outline-primary me-2" onclick="importStudents()">
+                <i class="fas fa-file-import me-2"></i>导入考生
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('index') }}">
-                            <i class="fas fa-home"></i> 首页
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard') }}">
-                            <i class="fas fa-tachometer-alt"></i> 仪表板
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('exam_sessions') }}">
-                            <i class="fas fa-calendar-alt"></i> 考试管理
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('exam_templates') }}">
-                            <i class="fas fa-file-signature"></i> 试卷管理
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="{{ url_for('students') }}">
-                            <i class="fas fa-user-graduate"></i> 考生管理
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('registration') }}">
-                            <i class="fas fa-clipboard-check"></i> 报考管理
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('score_entry_dashboard') }}">
-                            <i class="fas fa-edit"></i> 评分录入
-                        </a>
-                    </li>
+            <button class="btn btn-wtf" onclick="openCreateModal()">
+                <i class="fas fa-plus me-2"></i>新建考生
+            </button>
+        </div>
+    </div>
 
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('report_cards') }}">
-                            <i class="fas fa-file-alt"></i> 成绩单
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('statistics') }}">
-                            <i class="fas fa-chart-bar"></i> 统计报表
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logout') }}">
-                            <i class="fas fa-sign-out-alt"></i> 注销
-                        </a>
-                    </li>
-                </ul>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="display:none;">学号</th>
+                            <th>姓名</th>
+                            <th>性别</th>
+                            <th>年级</th>
+                            <th>学校</th>
+                            <th>报考科目</th>
+                            <th style="display:none;">班级</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr>
+                            <td style="display:none;">{{ student.student_id }}</td>
+                            <td>{{ student.name }}</td>
+                            <td>
+                                {% if student.gender == 'M' %}
+                                <span class="badge bg-primary">男</span>
+                                {% elif student.gender == 'F' %}
+                                <span class="badge bg-danger">女</span>
+                                {% else %}
+                                <span class="badge bg-secondary">未知</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ student.grade_level }}</td>
+                            <td>{{ student.school.name if student.school else '未知' }}</td>
+                            <td>
+                                {% for reg in student.registrations %}
+                                <span class="badge bg-info text-dark mb-1">{{ reg.exam_template.name }}</span>
+                                {% endfor %}
+                            </td>
+                            <td style="display:none;">{{ student.class_name or '-' }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick='openEditModal({{ student.to_dict()|tojson }})'>
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteStudent({{ student.id }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">暂无考生数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
-    </nav>
-
-    <!-- 主要内容 -->
-    <main class="container mt-4">
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <h2><i class="fas fa-user-graduate me-2 text-wtf"></i>考生管理</h2>
-            </div>
-            <div class="col-md-6 text-end">
-                <button class="btn btn-outline-primary me-2" onclick="importStudents()">
-                    <i class="fas fa-file-import me-2"></i>导入考生
-                </button>
-                <button class="btn btn-wtf" onclick="openCreateModal()">
-                    <i class="fas fa-plus me-2"></i>新建考生
-                </button>
-            </div>
-        </div>
-
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="display:none;">学号</th>
-                                <th>姓名</th>
-                                <th>性别</th>
-                                <th>年级</th>
-                                <th>学校</th>
-                                <th style="display:none;">班级</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for student in students %}
-                            <tr>
-                                <td style="display:none;">{{ student.student_id }}</td>
-                                <td>{{ student.name }}</td>
-                                <td>
-                                    {% if student.gender == 'M' %}
-                                    <span class="badge bg-primary">男</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">女</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ student.grade_level }}</td>
-                                <td>{{ student.school.name if student.school else '未知' }}</td>
-                                <td style="display:none;">{{ student.class_name or '-' }}</td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary me-1" onclick='openEditModal({{ student.to_dict()|tojson }})'>
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteStudent({{ student.id }})">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="7" class="text-center py-4 text-muted">暂无考生数据</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </main>
+    </div>
 
     <!-- 模态框 -->
     <div class="modal fade" id="studentModal" tabindex="-1">
@@ -176,10 +108,6 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">学校</label>
-                            <!-- 
-                              Updated to allow input or selection.
-                              Using a datalist for flexibility.
-                            -->
                             <input class="form-control" list="schoolOptions" id="schoolName" required placeholder="选择或输入学校名称">
                             <datalist id="schoolOptions">
                                 {% for school in schools %}
@@ -187,9 +115,15 @@
                                 {% endfor %}
                             </datalist>
                         </div>
-                        <div class="mb-3" style="display:none;">
+                        <div class="mb-3">
                             <label class="form-label">班级 (选填)</label>
                             <input type="text" class="form-control" id="className">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">考试报名 (多选)</label>
+                            <div id="registrationOptions" class="border p-2 bg-light rounded" style="max-height: 250px; overflow-y: auto;">
+                                <div class="text-muted small">正在加载...</div>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -200,177 +134,249 @@
             </div>
         </div>
     </div>
+{% endblock %}
 
-    <!-- JavaScript -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-        let modal;
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    let modal;
+    let allRegistrationOptions = [];
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        modal = new bootstrap.Modal(document.getElementById('studentModal'));
+        fetchRegistrationOptions();
+    });
+
+    function fetchRegistrationOptions() {
+        fetch('/api/students/registration-options')
+            .then(res => res.json())
+            .then(data => {
+                allRegistrationOptions = data;
+            })
+            .catch(err => console.error('Error fetching reg options:', err));
+    }
+
+    function renderRegistrationOptions(currentRegs = []) {
+        const container = document.getElementById('registrationOptions');
+        if (!allRegistrationOptions.length) {
+            container.innerHTML = '<div class="text-muted small">无可用考试场次</div>';
+            return;
+        }
+
+        const currentSet = new Set(currentRegs.map(r => `${r.session_id}-${r.template_id}`));
+
+        let html = '';
+        allRegistrationOptions.forEach(session => {
+            html += `<div class="mb-2">`;
+            html += `<div class="fw-bold">${session.name}</div>`;
+            html += `<div class="ms-3">`;
+            
+            if (session.templates.length === 0) {
+                 html += `<span class="text-muted small">无试卷</span>`;
+            } else {
+                session.templates.forEach(tpl => {
+                    const key = `${session.id}-${tpl.id}`;
+                    const checked = currentSet.has(key) ? 'checked' : '';
+                    html += `
+                        <div class="form-check">
+                            <input class="form-check-input reg-checkbox" type="checkbox" 
+                                   value="${tpl.id}" data-session="${session.id}" id="reg-${key}" ${checked}>
+                            <label class="form-check-label" for="reg-${key}">
+                                ${tpl.name} <span class="text-muted small">(${tpl.subject_name})</span>
+                            </label>
+                        </div>
+                    `;
+                });
+            }
+            html += `</div></div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function openCreateModal() {
+        document.getElementById('modalTitle').textContent = '新建考生';
+        document.getElementById('studentForm').reset();
+        document.getElementById('studentDbId').value = '';
+        renderRegistrationOptions([]);
+        modal.show();
+    }
+
+    function openEditModal(studentBasic) {
+        document.getElementById('modalTitle').textContent = '编辑考生';
+        document.getElementById('studentDbId').value = studentBasic.id;
+        document.getElementById('studentId').value = studentBasic.student_id;
+        document.getElementById('name').value = studentBasic.name;
+        document.getElementById('gender').value = studentBasic.gender;
+        document.getElementById('gradeLevel').value = studentBasic.grade_level;
         
-        document.addEventListener('DOMContentLoaded', function() {
-            modal = new bootstrap.Modal(document.getElementById('studentModal'));
+        // 如果后端返回的 student 对象里包含 school_name 或者 school 对象
+        document.getElementById('schoolName').value = studentBasic.school_name || (studentBasic.school ? studentBasic.school.name : ''); 
+        
+        document.getElementById('className').value = studentBasic.class_name;
+        modal.show();
+        
+        document.getElementById('registrationOptions').innerHTML = '<div class="text-muted small">加载报名信息...</div>';
+
+        fetch(`/api/students/${studentBasic.id}`)
+            .then(res => res.json())
+            .then(data => {
+                renderRegistrationOptions(data.registrations);
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('registrationOptions').innerHTML = '<div class="text-danger small">加载失败</div>';
+            });
+    }
+
+    function saveStudent() {
+        const id = document.getElementById('studentDbId').value;
+        
+        // Collect registrations
+        const regMap = {}; 
+        document.querySelectorAll('.reg-checkbox:checked').forEach(cb => {
+            const sId = cb.getAttribute('data-session');
+            const tId = cb.value;
+            if (!regMap[sId]) regMap[sId] = [];
+            regMap[sId].push(tId);
         });
 
-        function openCreateModal() {
-            document.getElementById('modalTitle').textContent = '新建考生';
-            document.getElementById('studentForm').reset();
-            document.getElementById('studentDbId').value = '';
-            modal.show();
-        }
+        const registrations = Object.keys(regMap).map(sId => ({
+            session_id: sId,
+            template_ids: regMap[sId]
+        }));
 
-        function openEditModal(student) {
-            document.getElementById('modalTitle').textContent = '编辑考生';
-            document.getElementById('studentDbId').value = student.id;
-            document.getElementById('studentId').value = student.student_id;
-            document.getElementById('name').value = student.name;
-            document.getElementById('gender').value = student.gender;
-            document.getElementById('gradeLevel').value = student.grade_level;
-            
-            // 如果后端返回的 student 对象里包含 school_name 或者 school 对象
-            // 这里假设 student.school_name 存在，或者通过 student.school.name 获取
-            // 注意：template 中的 student.to_dict()|tojson 依赖于 Student 模型是否有 to_dict 方法
-            // 如果没有，可能需要手动构建字典。
-            // 假设 to_dict 返回 school_name
-            document.getElementById('schoolName').value = student.school_name || ''; 
-            
-            document.getElementById('className').value = student.class_name;
-            modal.show();
-        }
+        const data = {
+            student_id: document.getElementById('studentId').value,
+            name: document.getElementById('name').value,
+            gender: document.getElementById('gender').value,
+            grade_level: document.getElementById('gradeLevel').value,
+            school_name: document.getElementById('schoolName').value,
+            class_name: document.getElementById('className').value,
+            registrations: registrations
+        };
 
-        function saveStudent() {
-            const id = document.getElementById('studentDbId').value;
-            const data = {
-                student_id: document.getElementById('studentId').value,
-                name: document.getElementById('name').value,
-                gender: document.getElementById('gender').value,
-                grade_level: document.getElementById('gradeLevel').value,
-                school_name: document.getElementById('schoolName').value,
-                class_name: document.getElementById('className').value
-            };
+        const url = id ? `/api/students/\${id}` : '/api/students/create';
+        const method = id ? 'PUT' : 'POST';
 
-            const url = id ? `/api/students/${id}` : '/api/students/create';
-            const method = id ? 'PUT' : 'POST';
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                Swal.fire('成功', result.message, 'success').then(() => {
+                    location.reload();
+                });
+            } else {
+                Swal.fire('错误', result.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            Swal.fire('错误', '系统错误，请重试', 'error');
+        });
+    }
 
-            fetch(url, {
-                method: method,
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    Swal.fire('成功', result.message, 'success').then(() => {
-                        location.reload();
-                    });
-                } else {
-                    Swal.fire('错误', result.message, 'error');
-                }
+    function importStudents() {
+        // Fetch sessions first
+        fetch('/api/exam-sessions')
+            .then(res => res.json())
+            .then(data => {
+                const sessions = data.sessions;
+                let options = sessions.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                
+                Swal.fire({
+                    title: '导入考生数据',
+                    html: `
+                        <div class="mb-3 text-start">
+                            <label class="form-label">选择Excel文件</label>
+                            <input type="file" id="importFile" class="form-control" accept=".xlsx, .xls">
+                        </div>
+                        <div class="mb-3 text-start">
+                            <label class="form-label">选择考试场次</label>
+                            <select id="importSession" class="form-select">
+                                \${options}
+                            </select>
+                        </div>
+                        <p class="text-muted small text-start">若不上传文件，将使用服务器默认样本数据。</p>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: '开始导入',
+                    showLoaderOnConfirm: true,
+                    preConfirm: () => {
+                        const fileInput = document.getElementById('importFile');
+                        const sessionId = document.getElementById('importSession').value;
+                        
+                        const formData = new FormData();
+                        if (fileInput.files.length > 0) {
+                            formData.append('file', fileInput.files[0]);
+                        }
+                        formData.append('session_id', sessionId);
+                        
+                        return fetch('/api/students/import', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(response.statusText)
+                            }
+                            return response.json()
+                        })
+                        .catch(error => {
+                            Swal.showValidationMessage(
+                                `请求失败: \${error}`
+                            )
+                        })
+                    },
+                    allowOutsideClick: () => !Swal.isLoading()
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        if (result.value.success) {
+                            Swal.fire('成功', result.value.message, 'success').then(() => location.reload());
+                        } else {
+                            Swal.fire('错误', result.value.message, 'error');
+                        }
+                    }
+                })
             })
             .catch(error => {
-                console.error('Error:', error);
-                Swal.fire('错误', '系统错误，请重试', 'error');
+                console.error('Error fetching sessions:', error);
+                Swal.fire('错误', '无法获取考试场次列表', 'error');
             });
-        }
-
-        function importStudents() {
-            // Fetch sessions first
-            fetch('/api/exam-sessions')
-                .then(res => res.json())
-                .then(data => {
-                    const sessions = data.sessions;
-                    let options = sessions.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-                    
-                    Swal.fire({
-                        title: '导入考生数据',
-                        html: `
-                            <div class="mb-3 text-start">
-                                <label class="form-label">选择Excel文件</label>
-                                <input type="file" id="importFile" class="form-control" accept=".xlsx, .xls">
-                            </div>
-                            <div class="mb-3 text-start">
-                                <label class="form-label">选择考试场次</label>
-                                <select id="importSession" class="form-select">
-                                    ${options}
-                                </select>
-                            </div>
-                            <p class="text-muted small text-start">若不上传文件，将使用服务器默认样本数据。</p>
-                        `,
-                        showCancelButton: true,
-                        confirmButtonText: '开始导入',
-                        showLoaderOnConfirm: true,
-                        preConfirm: () => {
-                            const fileInput = document.getElementById('importFile');
-                            const sessionId = document.getElementById('importSession').value;
-                            
-                            const formData = new FormData();
-                            if (fileInput.files.length > 0) {
-                                formData.append('file', fileInput.files[0]);
-                            }
-                            formData.append('session_id', sessionId);
-                            
-                            return fetch('/api/students/import', {
-                                method: 'POST',
-                                body: formData
-                            })
-                            .then(response => {
-                                if (!response.ok) {
-                                    throw new Error(response.statusText)
-                                }
-                                return response.json()
-                            })
-                            .catch(error => {
-                                Swal.showValidationMessage(
-                                    `请求失败: ${error}`
-                                )
-                            })
-                        },
-                        allowOutsideClick: () => !Swal.isLoading()
-                    }).then((result) => {
-                        if (result.isConfirmed) {
-                            if (result.value.success) {
-                                Swal.fire('成功', result.value.message, 'success').then(() => location.reload());
-                            } else {
-                                Swal.fire('错误', result.value.message, 'error');
-                            }
-                        }
-                    })
+    }
+    
+    function deleteStudent(id) {
+        Swal.fire({
+            title: '确定删除?',
+            text: "此操作无法撤销！",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: '确定删除',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/api/students/\${id}`, {
+                    method: 'DELETE'
                 })
-                .catch(error => {
-                    console.error('Error fetching sessions:', error);
-                    Swal.fire('错误', '无法获取考试场次列表', 'error');
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        Swal.fire('已删除', result.message, 'success').then(() => {
+                            location.reload();
+                        });
+                    } else {
+                        Swal.fire('错误', result.message, 'error');
+                    }
                 });
-        }
-        
-        function deleteStudent(id) {
-            Swal.fire({
-                title: '确定删除?',
-                text: "此操作无法撤销！",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: '确定删除',
-                cancelButtonText: '取消'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    fetch(`/api/students/${id}`, {
-                        method: 'DELETE'
-                    })
-                    .then(response => response.json())
-                    .then(result => {
-                        if (result.success) {
-                            Swal.fire('已删除', result.message, 'success').then(() => {
-                                location.reload();
-                            });
-                        } else {
-                            Swal.fire('错误', result.message, 'error');
-                        }
-                    });
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+            }
+        });
+    }
+</script>
+{% endblock %}

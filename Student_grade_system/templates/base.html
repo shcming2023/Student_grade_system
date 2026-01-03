@@ -48,6 +48,7 @@
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'statistics' %}active{% endif %}" href="{{ url_for('statistics') }}"><i class="fas fa-chart-bar"></i> 统计报表</a></li>
                     {% if session.get('role') == 'admin' %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'teachers_page' %}active{% endif %}" href="{{ url_for('teachers_page') }}"><i class="fas fa-chalkboard-teacher"></i> 教师管理</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}"><i class="fas fa-cogs"></i> 系统设置</a></li>
                     {% endif %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> 注销</a></li>
                 </ul>
@@ -81,6 +82,7 @@
                 {% if session.get('role') == 'admin' %}
                 <div class="text-uppercase small fw-bold text-white-50 mt-3 mb-1 px-3">系统管理</div>
                 <a href="{{ url_for('teachers_page') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'teachers_page' %}active text-white{% endif %}"><i class="fas fa-chalkboard-teacher me-3"></i>教师管理</a>
+                <a href="{{ url_for('settings') }}" class="list-group-item list-group-item-action bg-transparent text-white-50 {% if request.endpoint == 'settings' %}active text-white{% endif %}"><i class="fas fa-cogs me-3"></i>系统设置</a>
                 {% endif %}
                 
                 <div class="mt-4 border-top border-light pt-3">

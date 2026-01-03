@@ -33,6 +33,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
+import requests
 
 # 创建Flask应用
 app = Flask(__name__)
@@ -125,11 +126,21 @@ class SystemSetting(db.Model):
     company_name_zh = db.Column(db.String(100), default='橡心国际')
     logo_path = db.Column(db.String(255))  # Path relative to static folder
     
+    # LLM Configuration
+    llm_api_provider = db.Column(db.String(50), default='deepseek')
+    llm_api_key = db.Column(db.String(255))
+    llm_api_base_url = db.Column(db.String(255), default='https://api.deepseek.com')
+    llm_model = db.Column(db.String(100), default='deepseek-chat')
+    
     def to_dict(self):
         return {
             'company_name': self.company_name,
             'company_name_zh': self.company_name_zh,
-            'logo_path': self.logo_path
+            'logo_path': self.logo_path,
+            'llm_api_provider': self.llm_api_provider,
+            'llm_api_key': self.llm_api_key,
+            'llm_api_base_url': self.llm_api_base_url,
+            'llm_model': self.llm_model
         }
 
 class ExamSession(db.Model):
@@ -272,16 +283,37 @@ class Score(db.Model):
     student = db.relationship('Student')
     question = db.relationship('Question')
 
+class AICommentHistory(db.Model):
+    __tablename__ = 'ai_comment_history'
+    id = db.Column(db.Integer, primary_key=True)
+    registration_id = db.Column(db.Integer, db.ForeignKey('exam_registrations.id'), nullable=False)
+    version = db.Column(db.Integer, nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    is_ai_generated = db.Column(db.Boolean, default=True)
+    status = db.Column(db.String(20), default='draft')  # draft, confirmed
+    generated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    confirmed_at = db.Column(db.DateTime)
+    confirmed_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+
+    registration = db.relationship('ExamRegistration', backref='ai_comments')
+    confirmer = db.relationship('User', foreign_keys=[confirmed_by])
+
+    __table_args__ = (
+        db.UniqueConstraint('registration_id', 'version', name='uq_registration_version'),
+    )
+
 class ReportCard(db.Model):
     __tablename__ = 'report_cards'
     id = db.Column(db.Integer, primary_key=True)
     registration_id = db.Column(db.Integer, db.ForeignKey('exam_registrations.id'))
     ai_comment = db.Column(db.Text)
     teacher_comment = db.Column(db.Text)
+    confirmed_comment_id = db.Column(db.Integer, db.ForeignKey('ai_comment_history.id'))
     pdf_url = db.Column(db.String(255))
     generated_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     registration = db.relationship('ExamRegistration', backref=db.backref('report_card', uselist=False))
+    confirmed_comment = db.relationship('AICommentHistory', foreign_keys=[confirmed_comment_id])
 
 # 登录验证装饰器
 def login_required(f):
@@ -328,6 +360,12 @@ def settings():
     if request.method == 'POST':
         setting.company_name = request.form.get('company_name')
         setting.company_name_zh = request.form.get('company_name_zh')
+        
+        # LLM Settings
+        setting.llm_api_provider = request.form.get('llm_api_provider')
+        setting.llm_api_key = request.form.get('llm_api_key')
+        setting.llm_api_base_url = request.form.get('llm_api_base_url')
+        setting.llm_model = request.form.get('llm_model')
         
         # Handle logo upload
         if 'logo' in request.files:
@@ -488,6 +526,16 @@ def api_create_teacher():
 @login_required
 @admin_required
 def api_update_teacher(id):
+    # ... existing implementation ...
+    pass # Placeholder, I won't replace this part, I will search for the end of api_update_teacher
+
+# Let's search for something else to insert before.
+# How about inserting before `if __name__ == '__main__':` or at the end of file?
+# Or after `api_update_teacher`.
+
+# Let's try to insert after `api_update_teacher` is defined.
+# I need to see the content of api_update_teacher first to match correctly.
+
     user = User.query.get_or_404(id)
     data = request.get_json()
     
@@ -530,6 +578,228 @@ def api_delete_teacher(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
+
+# AI Comment APIs
+@app.route('/api/ai-comment/generate', methods=['POST'])
+@login_required
+def generate_ai_comment():
+    data = request.get_json()
+    registration_id = data.get('registration_id')
+    
+    # Resolve registration_id if missing
+    if not registration_id:
+        student_id = data.get('student_id')
+        template_name = data.get('template_name')
+        if student_id and template_name:
+            reg = db.session.query(ExamRegistration)\
+                .join(ExamTemplate, ExamRegistration.exam_template_id == ExamTemplate.id)\
+                .filter(ExamRegistration.student_id == student_id)\
+                .filter(ExamTemplate.name == template_name)\
+                .first()
+            if reg:
+                registration_id = reg.id
+
+    force = data.get('force', False)
+    
+    if not registration_id:
+        return jsonify({'success': False, 'message': 'Missing registration_id'}), 400
+        
+    registration = ExamRegistration.query.get(registration_id)
+    if not registration:
+        return jsonify({'success': False, 'message': 'Registration not found'}), 404
+        
+    # 1. Check Quota
+    MAX_GENERATIONS = 3
+    used_count = AICommentHistory.query.filter_by(registration_id=registration_id).count()
+    if used_count >= MAX_GENERATIONS:
+        return jsonify({
+            'success': False, 
+            'error': 'quota_exceeded', 
+            'message': f'已达到生成上限（{MAX_GENERATIONS}/{MAX_GENERATIONS}），无法继续生成。'
+        }), 400
+        
+    # 2. Check Completeness
+    questions = Question.query.filter_by(exam_template_id=registration.exam_template_id).all()
+    question_ids = [q.id for q in questions]
+    total_count = len(questions)
+    
+    if total_count > 0:
+        scores = Score.query.filter(
+            Score.student_id == registration.student_id,
+            Score.question_id.in_(question_ids)
+        ).all()
+        filled_count = len(scores)
+        missing_count = total_count - filled_count
+    else:
+        scores = []
+        filled_count = 0
+        missing_count = 0
+    
+    if missing_count > 0 and not force:
+        return jsonify({
+            'success': False,
+            'error': 'incomplete_scores',
+            'message': '检测到部分题目未填写成绩，请确认后重试。',
+            'missing_count': missing_count,
+            'total_count': total_count
+        }), 400
+        
+    # 3. Call LLM
+    setting = SystemSetting.query.first()
+    if not setting or not setting.llm_api_key:
+        return jsonify({'success': False, 'message': 'LLM API尚未配置，请联系管理员。'}), 500
+        
+    student = registration.student
+    template = registration.exam_template
+    
+    score_details = []
+    for s in scores:
+        q = next((x for x in questions if x.id == s.question_id), None)
+        if q:
+            score_details.append(f"题目{q.question_number}({q.knowledge_point}): {s.score}/{q.score}")
+            
+    prompt = f"""
+    请根据以下学生考试数据生成一段简短的评语（200字以内），包含优点和改进建议。
+    
+    学生姓名：{student.name}
+    考试名称：{template.name}
+    年级：{student.grade_level}
+    总分：{registration.score}
+    
+    题目得分详情：
+    {"; ".join(score_details)}
+    """
+    
+    try:
+        headers = {
+            "Authorization": f"Bearer {setting.llm_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": setting.llm_model,
+            "messages": [
+                {"role": "system", "content": "你是一位专业的老师，负责根据学生的考试成绩撰写评语。评语应客观、鼓励为主，指出具体知识点的掌握情况。"},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7
+        }
+        
+        response = requests.post(
+            f"{setting.llm_api_base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            return jsonify({'success': False, 'message': f'LLM API Error: {response.text}'}), 500
+            
+        result = response.json()
+        ai_content = result['choices'][0]['message']['content']
+        
+        # 4. Save to History
+        new_version = used_count + 1
+        history = AICommentHistory(
+            registration_id=registration_id,
+            version=new_version,
+            content=ai_content,
+            status='draft',
+            confirmed_by=session['user_id']
+        )
+        db.session.add(history)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'comment': {
+                'id': history.id,
+                'version': history.version,
+                'content': history.content,
+                'status': history.status,
+                'generated_at': history.generated_at.isoformat()
+            },
+            'remaining_quota': MAX_GENERATIONS - new_version
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/ai-comment/history', methods=['GET'])
+@login_required
+def get_ai_comment_history():
+    registration_id = request.args.get('registration_id')
+    
+    # Resolve registration_id if missing
+    if not registration_id:
+        student_id = request.args.get('student_id')
+        template_name = request.args.get('template_name')
+        if student_id and template_name:
+            reg = db.session.query(ExamRegistration)\
+                .join(ExamTemplate, ExamRegistration.exam_template_id == ExamTemplate.id)\
+                .filter(ExamRegistration.student_id == student_id)\
+                .filter(ExamTemplate.name == template_name)\
+                .first()
+            if reg:
+                registration_id = reg.id
+                
+    if not registration_id:
+        return jsonify({'success': False, 'message': 'Missing registration_id'}), 400
+        
+    history = AICommentHistory.query.filter_by(registration_id=registration_id).order_by(AICommentHistory.version.asc()).all()
+    
+    MAX_GENERATIONS = 3
+    used_count = len(history)
+    
+    return jsonify({
+        'success': True,
+        'history': [{
+            'id': h.id,
+            'version': h.version,
+            'content': h.content,
+            'status': h.status,
+            'generated_at': h.generated_at.isoformat(),
+            'confirmed_at': h.confirmed_at.isoformat() if h.confirmed_at else None
+        } for h in history],
+        'quota': {
+            'used': used_count,
+            'total': MAX_GENERATIONS,
+            'remaining': MAX_GENERATIONS - used_count
+        }
+    })
+
+@app.route('/api/ai-comment/confirm', methods=['POST'])
+@login_required
+def confirm_ai_comment():
+    data = request.get_json()
+    comment_id = data.get('comment_id')
+    content = data.get('content')
+    
+    if not comment_id:
+        return jsonify({'success': False, 'message': 'Missing comment_id'}), 400
+        
+    comment = AICommentHistory.query.get(comment_id)
+    if not comment:
+        return jsonify({'success': False, 'message': 'Comment not found'}), 404
+        
+    # Update comment
+    comment.content = content
+    comment.status = 'confirmed'
+    comment.confirmed_at = datetime.utcnow()
+    comment.confirmed_by = session['user_id']
+    
+    # Update ReportCard (create if not exists)
+    report_card = ReportCard.query.filter_by(registration_id=comment.registration_id).first()
+    if not report_card:
+        report_card = ReportCard(registration_id=comment.registration_id)
+        db.session.add(report_card)
+    
+    report_card.confirmed_comment_id = comment.id
+    report_card.teacher_comment = content 
+    
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': '评语已确认'})
 
 @app.route('/registration')
 @login_required
@@ -836,6 +1106,9 @@ def api_score_entry_student_detail(student_id):
     # 3.1 Get Report Card Comment
     report_card = ReportCard.query.filter_by(registration_id=reg.id).first()
     ai_comment = report_card.ai_comment if report_card else ""
+
+    # Get AI Generation Count
+    ai_gen_count = AICommentHistory.query.filter_by(registration_id=reg.id).count()
         
     # 4. Navigation (Prev/Next)
     prev_id = None
@@ -882,6 +1155,7 @@ def api_score_entry_student_detail(student_id):
         } for q in questions],
         'scores': scores,
         'ai_comment': ai_comment,
+        'ai_gen_count': ai_gen_count,
         'navigation': {
             'prev_id': prev_id,
             'next_id': next_id

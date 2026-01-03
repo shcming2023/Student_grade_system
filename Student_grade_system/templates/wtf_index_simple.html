@@ -75,6 +75,7 @@
     
     /* Icon Colors (Shared) */
     .icon-bg-primary { background-color: #e7f1ff; color: #0d6efd; }
+    .icon-bg-secondary { background-color: #e2e3e5; color: #6c757d; }
     .icon-bg-warning { background-color: #fff3cd; color: #ffc107; }
     .icon-bg-success { background-color: #d1e7dd; color: #198754; }
     .icon-bg-info { background-color: #cff4fc; color: #0dcaf0; }
@@ -299,6 +300,19 @@
                 </div>
             </div>
         </div>
+
+        <!-- 系统设置 -->
+        <a href="{{ url_for('settings') }}" class="menu-item">
+            <div class="d-flex align-items-center">
+                <div class="menu-icon icon-bg-secondary">
+                    <i class="fas fa-cogs"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="menu-title">系统设置</div>
+                    <div class="menu-desc">LLM配置及基本信息</div>
+                </div>
+            </div>
+        </a>
         {% endif %}
     </div>
     

@@ -22,6 +22,37 @@
                             <input type="text" class="form-control" name="company_name_zh" value="{{ setting.company_name_zh }}" required>
                             <div class="form-text">显示在成绩单右上角及系统标题。</div>
                         </div>
+
+                        <hr class="my-4">
+                        
+                        <h5 class="mb-3"><i class="fas fa-robot me-2 text-wtf"></i>AI 评语配置</h5>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">LLM 服务商</label>
+                            <select class="form-select" name="llm_api_provider">
+                                <option value="deepseek" {% if setting.llm_api_provider == 'deepseek' %}selected{% endif %}>DeepSeek (深度求索)</option>
+                                <option value="openai" {% if setting.llm_api_provider == 'openai' %}selected{% endif %}>OpenAI</option>
+                                <option value="custom" {% if setting.llm_api_provider == 'custom' %}selected{% endif %}>自定义 (OpenAI 兼容)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">API Key</label>
+                            <input type="password" class="form-control" name="llm_api_key" value="{{ setting.llm_api_key or '' }}" placeholder="sk-..." autocomplete="off">
+                            <div class="form-text">请妥善保管您的 API Key，不会明文显示。</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Base URL</label>
+                            <input type="text" class="form-control" name="llm_api_base_url" value="{{ setting.llm_api_base_url or 'https://api.deepseek.com' }}" placeholder="https://api.deepseek.com">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">模型名称</label>
+                            <input type="text" class="form-control" name="llm_model" value="{{ setting.llm_model or 'deepseek-chat' }}" placeholder="deepseek-chat">
+                        </div>
+                        
+                        <hr class="my-4">
                         
                         <div class="mb-3">
                             <label class="form-label">公司 Logo</label>

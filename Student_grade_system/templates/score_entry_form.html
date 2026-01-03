@@ -94,12 +94,35 @@
             <div class="card shadow-sm mt-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="fas fa-robot me-2 text-primary"></i>AI 学习建议与评语</h5>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="generateAIComment()">
-                        <i class="fas fa-magic me-1"></i> 生成 AI 评语
-                    </button>
+                    <div>
+                        <span class="badge bg-secondary me-2" id="ai-quota-badge">已生成: -/3</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="showAIHistory()">
+                            <i class="fas fa-history me-1"></i> 历史版本
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="generateAIComment()" id="btn-generate-ai">
+                            <i class="fas fa-magic me-1"></i> 生成 AI 评语
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <textarea class="form-control" id="ai-comment" rows="4" placeholder="点击生成按钮获取AI评语，或手动输入..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- History Modal -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">AI 评语历史版本</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="history-list" class="list-group">
+                    <div class="text-center py-3 text-muted">加载中...</div>
                 </div>
             </div>
         </div>
@@ -445,37 +468,173 @@
         errorDiv.classList.remove('d-none');
     }
 
-    function generateAIComment() {
-        const btn = document.querySelector('button[onclick="generateAIComment()"]');
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>生成中...';
+    function generateAIComment(force = false) {
+        const btn = document.getElementById('btn-generate-ai');
+        const originalText = force ? btn.innerHTML : '<i class="fas fa-magic me-1"></i> 生成 AI 评语'; // Keep icon if not force
+        
+        if (!force) {
+            // Check if already generating
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>生成中...';
+        }
+
+        const payload = {
+            student_id: currentStudentId,
+            template_name: currentTemplateName,
+            force: force
+        };
         
         fetch('/api/ai-comment/generate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                student_id: currentStudentId,
-                template_name: currentTemplateName
-            })
+            body: JSON.stringify(payload)
         })
         .then(response => response.json())
         .then(data => {
-            if (data.error) {
-                Swal.fire('生成失败', data.error, 'error');
+            if (data.success) {
+                // Update Comment
+                const aiComment = document.getElementById('ai-comment');
+                aiComment.value = data.comment.content;
+                saveField(aiComment); // Auto save
+                
+                // Update Badge
+                const remaining = data.remaining_quota;
+                const used = 3 - remaining;
+                const badge = document.getElementById('ai-quota-badge');
+                badge.textContent = `已生成: ${used}/3`;
+                
+                if (used >= 3) {
+                    badge.classList.remove('bg-secondary');
+                    badge.classList.add('bg-warning', 'text-dark');
+                }
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: '生成成功',
+                    text: 'AI 评语已生成并填充，请查阅修改。',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+                
             } else {
-                document.getElementById('ai-comment').value = data.comment;
+                if (data.error === 'incomplete_scores') {
+                    Swal.fire({
+                        title: '成绩不完整',
+                        text: `${data.message} (缺失 ${data.missing_count}/${data.total_count} 题)`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: '强制生成',
+                        cancelButtonText: '取消',
+                        confirmButtonColor: '#d63384'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            generateAIComment(true);
+                        } else {
+                            btn.disabled = false;
+                            btn.innerHTML = originalText;
+                        }
+                    });
+                    // Return here to avoid resetting button immediately (wait for user action)
+                    return; 
+                } else if (data.error === 'quota_exceeded') {
+                    Swal.fire('次数耗尽', data.message, 'error');
+                } else {
+                    Swal.fire('生成失败', data.message || '未知错误', 'error');
+                }
             }
         })
         .catch(err => {
             console.error(err);
-            Swal.fire('错误', '生成出错', 'error');
+            Swal.fire('错误', '网络请求出错', 'error');
         })
         .finally(() => {
+            // Only reset if not incomplete_scores (which handles reset in confirm/cancel)
+            // But wait, if we are in recursive call (force=true), we should reset.
+            // If we are in first call and got incomplete_scores, we returned early.
+            // So if we are here, we are either success, error (not incomplete), or force call done.
             btn.disabled = false;
-            btn.innerHTML = originalText;
+            btn.innerHTML = '<i class="fas fa-magic me-1"></i> 生成 AI 评语';
+        });
+    }
+
+    function showAIHistory() {
+        const modal = new bootstrap.Modal(document.getElementById('historyModal'));
+        modal.show();
+        
+        const list = document.getElementById('history-list');
+        list.innerHTML = '<div class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-1"></span>加载中...</div>';
+        
+        fetch(`/api/ai-comment/history?student_id=${currentStudentId}&template_name=${encodeURIComponent(currentTemplateName)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                if (data.history.length === 0) {
+                    list.innerHTML = '<div class="text-center py-3 text-muted">暂无历史评语</div>';
+                    return;
+                }
+                
+                let html = '';
+                data.history.forEach(h => {
+                    html += `
+                        <div class="list-group-item list-group-item-action flex-column align-items-start">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1 fw-bold">版本 ${h.version}</h6>
+                                <small class="text-muted">${new Date(h.generated_at).toLocaleString()}</small>
+                            </div>
+                            <p class="mb-1 mt-2 text-break" style="white-space: pre-wrap;">${h.content}</p>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="useHistoryComment(${h.id})">
+                                    <i class="fas fa-check me-1"></i> 使用此版本
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                list.innerHTML = html;
+            } else {
+                list.innerHTML = `<div class="text-center py-3 text-danger">加载失败: ${data.message}</div>`;
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            list.innerHTML = '<div class="text-center py-3 text-danger">网络错误</div>';
+        });
+    }
+    
+    // Helper to decode HTML entities if needed, but here we just need to get content from history object?
+    // Actually, passing content via onclick is tricky due to quotes.
+    // Better to find the content from the data we just fetched? 
+    // Or just fetch again? Or store in global?
+    // Let's store history temporarily or just use DOM.
+    // Simpler: pass the ID, and when clicked, find the text in the DOM or fetch it?
+    // Or, we can just grab the text from the <p> tag sibling.
+    
+    function useHistoryComment(id) {
+        // Find the content. Since we rendered it, we can find it.
+        // But safer to just look at the text in the P tag relative to the button.
+        // Or simpler: The button onclick is inside the item.
+        // Let's use a trick: search the data? No, data is lost.
+        // Let's reload? No.
+        
+        // Let's traverse DOM
+        const btn = event.target.closest('button');
+        const item = btn.closest('.list-group-item');
+        const content = item.querySelector('p').innerText;
+        
+        document.getElementById('ai-comment').value = content;
+        saveField(document.getElementById('ai-comment'));
+        
+        bootstrap.Modal.getInstance(document.getElementById('historyModal')).hide();
+        
+        Swal.fire({
+            icon: 'success',
+            title: '已应用',
+            text: '已将该版本评语填入编辑框',
+            timer: 1000,
+            showConfirmButton: false
         });
     }
 </script>

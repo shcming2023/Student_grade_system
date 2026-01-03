@@ -125,7 +125,14 @@ function testConnection(btn) {
             model: model
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(text => {
+                throw new Error(`HTTP ${response.status}: ${text.substring(0, 100)}`);
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             Swal.fire('连接成功', data.message, 'success');
@@ -135,7 +142,7 @@ function testConnection(btn) {
     })
     .catch(error => {
         console.error(error);
-        Swal.fire('错误', '网络请求失败', 'error');
+        Swal.fire('错误', `请求出错: ${error.message}`, 'error');
     })
     .finally(() => {
         btn.disabled = false;

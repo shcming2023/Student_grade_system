@@ -52,6 +52,12 @@
                             <input type="text" class="form-control" name="llm_model" value="{{ setting.llm_model or 'deepseek-chat' }}" placeholder="deepseek-chat">
                         </div>
                         
+                        <div class="mb-3">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="testConnection(this)">
+                                <i class="fas fa-plug me-1"></i> 测试连接
+                            </button>
+                        </div>
+                        
                         <hr class="my-4">
                         
                         <div class="mb-3">
@@ -88,4 +94,53 @@
             </p>
         </div>
     </footer>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function testConnection(btn) {
+    const provider = document.querySelector('select[name="llm_api_provider"]').value;
+    const apiKey = document.querySelector('input[name="llm_api_key"]').value;
+    const baseUrl = document.querySelector('input[name="llm_api_base_url"]').value;
+    const model = document.querySelector('input[name="llm_model"]').value;
+
+    if (!apiKey) {
+        Swal.fire('提示', '请先填写 API Key', 'warning');
+        return;
+    }
+
+    const originalContent = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>测试中...';
+
+    fetch('/api/test-llm-connection', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            provider: provider,
+            api_key: apiKey,
+            base_url: baseUrl,
+            model: model
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            Swal.fire('连接成功', data.message, 'success');
+        } else {
+            Swal.fire('连接失败', data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error(error);
+        Swal.fire('错误', '网络请求失败', 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+    });
+}
+</script>
 {% endblock %}

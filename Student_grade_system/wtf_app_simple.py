@@ -383,9 +383,47 @@ def settings():
                 setting.logo_path = f'img/{filename}'
                 
         db.session.commit()
+        flash('系统设置已保存', 'success')
         return redirect(url_for('settings'))
         
     return render_template('wtf_settings.html', setting=setting)
+
+@app.route('/api/test-llm-connection', methods=['POST'])
+@login_required
+@admin_required
+def test_llm_connection():
+    """测试LLM连接"""
+    data = request.get_json()
+    api_key = data.get('api_key')
+    base_url = data.get('base_url', 'https://api.deepseek.com')
+    model = data.get('model', 'deepseek-chat')
+    
+    if not api_key:
+        return jsonify({'success': False, 'message': 'API Key 不能为空'})
+        
+    try:
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        payload = {
+            'model': model,
+            'messages': [{'role': 'user', 'content': 'Ping'}],
+            'max_tokens': 5
+        }
+        
+        endpoint = f"{base_url.rstrip('/')}/chat/completions"
+        
+        import requests
+        response = requests.post(endpoint, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            return jsonify({'success': True, 'message': '连接成功！LLM 响应正常。'})
+        else:
+            return jsonify({'success': False, 'message': f'连接失败 (HTTP {response.status_code}): {response.text[:100]}'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'连接测试出错: {str(e)}'})
 
 # Context processor to inject settings into all templates
 @app.context_processor

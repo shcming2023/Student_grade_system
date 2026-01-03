@@ -29,8 +29,8 @@
 
     <!-- 考试列表 -->
     <div class="card shadow-sm">
-        <div class="card-body p-0">
-            <div class="table-responsive">
+        <div class="card-body p-0 p-md-3">
+            <div class="table-responsive d-none d-md-block">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
@@ -69,6 +69,43 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Mobile Cards -->
+            <div class="d-md-none p-3">
+                {% for exam in sessions %}
+                <div class="card mb-3 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h5 class="card-title fw-bold mb-1">{{ exam.name }}</h5>
+                                <div class="text-muted small">
+                                    <i class="bi bi-calendar-event me-1"></i>{{ exam.exam_date }}
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <span class="text-muted small">#{{ exam.id }}</span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2 mt-3">
+                            <button class="btn btn-sm btn-outline-primary flex-grow-1" 
+                                    onclick="editExam('{{ exam.id }}', '{{ exam.name }}', '{{ exam.exam_date }}')">
+                                <i class="bi bi-pencil me-1"></i> 编辑
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger flex-grow-1" 
+                                    onclick="deleteExam('{{ exam.id }}', '{{ exam.name }}')">
+                                <i class="bi bi-trash me-1"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    暂无考试数据
+                </div>
+                {% endfor %}
             </div>
         </div>
         <div class="card-footer bg-white border-top-0 py-3">
@@ -132,28 +169,7 @@
     </div>
 </div>
 
-<!-- 删除确认模态框 -->
-<div class="modal fade" id="deleteModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">确认删除</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p>确定要删除考试 <span id="deleteExamName" class="fw-bold"></span> 吗？</p>
-                <p class="text-danger small">注意：这将同时删除该考试下的所有成绩记录！</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <form action="{{ url_for('handle_exam_delete') }}" method="post" class="d-inline">
-                    <input type="hidden" name="exam_id" id="deleteExamId">
-                    <button type="submit" class="btn btn-danger">确认删除</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- 删除确认模态框 removed as we use SweetAlert2 -->
 {% endblock %}
 
 {% block extra_js %}
@@ -170,9 +186,36 @@
 
 
     function deleteExam(id, name) {
-        document.getElementById('deleteExamId').value = id;
-        document.getElementById('deleteExamName').textContent = name;
-        new bootstrap.Modal(document.getElementById('deleteModal')).show();
+        Swal.fire({
+            title: '确定要删除该考试场次吗？',
+            text: `即将删除：${name}。此操作无法撤销！`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: '确定删除',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/api/exam-sessions/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        Swal.fire('已删除', result.message, 'success').then(() => {
+                            location.reload();
+                        });
+                    } else {
+                        Swal.fire('错误', result.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('错误', '系统错误，请重试', 'error');
+                });
+            }
+        });
     }
 
     // 重置模态框

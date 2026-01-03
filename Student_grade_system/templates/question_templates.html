@@ -14,9 +14,9 @@
                     <button class="btn btn-outline-primary" onclick="refreshTemplates()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
-                    <button class="btn btn-success" onclick="initializeTemplates()">
+                    <!-- <button class="btn btn-success" onclick="initializeTemplates()">
                         <i class="bi bi-database-add"></i> 初始化G1-G6模板
-                    </button>
+                    </button> -->
                 </div>
             </div>
 
@@ -173,18 +173,18 @@
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('加载题目失败');
+                    Swal.fire('错误', '加载题目失败', 'error');
                 });
         }
 
         // 编辑模板
         function editTemplate(templateId) {
-            alert('编辑功能开发中...');
+            Swal.fire('提示', '编辑功能开发中...', 'info');
         }
 
         // 导出模板
         function exportTemplate(templateId) {
-            alert('导出功能开发中...');
+            Swal.fire('提示', '导出功能开发中...', 'info');
         }
 
         // 刷新模板
@@ -194,22 +194,34 @@
 
         // 初始化G1-G6模板
         function initializeTemplates() {
-            if (confirm('确定要重新初始化G1-G6题目模板吗？这将覆盖现有数据。')) {
-                fetch('/api/init-templates', { method: 'POST' })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert('模板初始化成功！');
-                            location.reload();
-                        } else {
-                            alert('模板初始化失败：' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('初始化失败');
-                    });
-            }
+            Swal.fire({
+                title: '确定要重新初始化G1-G6题目模板吗？',
+                text: "这将覆盖现有数据，且不可恢复！",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: '确定初始化',
+                cancelButtonText: '取消'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch('/api/init-templates', { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire('成功', '模板初始化成功！', 'success').then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire('失败', '模板初始化失败：' + data.message, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            Swal.fire('错误', '初始化失败', 'error');
+                        });
+                }
+            });
         }
     </script>
 {% endblock %}

@@ -28,6 +28,11 @@
         padding-left: 12px;
         padding-right: 12px;
     }
+    .score-input.saved-success {
+        border-color: #198754 !important;
+        background-color: #f8fff9 !important;
+        transition: all 0.5s ease;
+    }
 </style>
 {% endblock %}
 
@@ -105,8 +110,8 @@
 <div class="sticky-footer d-none" id="action-bar">
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center">
-            <div class="text-muted small">
-                <i class="fas fa-info-circle me-1"></i> 修改后请点击保存
+            <div class="text-muted small" id="save-status">
+                <i class="fas fa-info-circle me-1"></i> 修改后自动保存
             </div>
             <div>
                 <button type="button" class="btn btn-secondary me-2" onclick="history.back()">取消</button>
@@ -187,7 +192,7 @@
         const container = document.getElementById('questions-container');
         let html = '';
         
-        data.questions.forEach(q => {
+        data.questions.forEach((q, index) => {
             const existingScore = data.scores[q.id] !== undefined ? data.scores[q.id] : '';
             
             html += `
@@ -203,7 +208,9 @@
                                        name="q_${q.id}" 
                                        id="q_${q.id}"
                                        value="${existingScore}"
+                                       data-original-value="${existingScore}"
                                        min="0" max="${q.score}" step="0.5"
+                                       tabindex="${index + 1}"
                                        placeholder="满分: ${q.score}">
                                 <span class="input-group-text text-muted small">/${q.score}</span>
                             </div>
@@ -215,19 +222,148 @@
         container.innerHTML = html;
 
         // 4. AI Comment
-        document.getElementById('ai-comment').value = data.ai_comment || '';
+        const aiComment = document.getElementById('ai-comment');
+        aiComment.value = data.ai_comment || '';
+        aiComment.dataset.originalValue = data.ai_comment || '';
 
         // Show UI
         document.getElementById('loading').classList.add('d-none');
         document.getElementById('form-container').classList.remove('d-none');
         document.getElementById('action-bar').classList.remove('d-none');
+        
+        setupNavigation();
     }
 
-    function saveScores() {
+    function setupNavigation() {
+        const inputs = Array.from(document.querySelectorAll('.score-input'));
+        inputs.forEach((input, index) => {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const nextInput = inputs[index + 1];
+                    if (nextInput) {
+                        nextInput.focus();
+                    } else {
+                        // If last input, focus AI comment
+                        document.getElementById('ai-comment').focus();
+                    }
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const nextInput = inputs[index + 1];
+                    if (nextInput) nextInput.focus();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const prevInput = inputs[index - 1];
+                    if (prevInput) prevInput.focus();
+                }
+            });
+            
+            // Auto-select content on focus for quick edit
+            input.addEventListener('focus', function() {
+                this.select();
+            });
+
+            // Auto-save on blur
+            input.addEventListener('blur', function() {
+                saveField(this);
+            });
+        });
+        
+        // AI Comment shortcuts
+        const aiComment = document.getElementById('ai-comment');
+        aiComment.addEventListener('blur', function() {
+            saveField(this);
+        });
+
+        aiComment.addEventListener('keydown', function(e) {
+            // Ctrl+Enter in AI comment -> Save & Next Student
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                saveScores(false).then(() => {
+                    if (navigationData.next_id) {
+                        navigateTo(navigationData.next_id);
+                    } else {
+                        Swal.fire('完成', '已是最后一名考生', 'success');
+                    }
+                });
+            }
+        });
+        
+        // Ctrl+S to save
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                saveScores();
+            }
+        });
+    }
+
+    function saveField(input) {
+        const val = input.value.trim();
+        const original = input.dataset.originalValue || '';
+        
+        if (val === original) return;
+
+        const statusDiv = document.getElementById('save-status');
+        statusDiv.innerHTML = '<span class="text-primary"><span class="spinner-border spinner-border-sm me-1"></span>正在保存...</span>';
+
+        const payload = {
+            student_id: currentStudentId,
+            template_name: currentTemplateName
+        };
+
+        if (input.id === 'ai-comment') {
+            payload.ai_comment = val;
+        } else {
+            const qId = input.id.replace('q_', '');
+            if (val !== '') {
+                payload.scores = {};
+                payload.scores[qId] = parseFloat(val);
+            } else {
+                return;
+            }
+        }
+
+        fetch('/api/score-entry/save', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                input.dataset.originalValue = val;
+                
+                input.classList.add('saved-success');
+                setTimeout(() => input.classList.remove('saved-success'), 1000);
+
+                statusDiv.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i> 已自动保存</span>';
+                setTimeout(() => {
+                    statusDiv.innerHTML = '<i class="fas fa-info-circle me-1"></i> 修改后自动保存';
+                }, 2000);
+            } else {
+                 statusDiv.innerHTML = '<span class="text-danger">保存失败: ' + result.message + '</span>';
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            statusDiv.innerHTML = '<span class="text-danger">网络错误</span>';
+        });
+    }
+
+    function saveScores(silent = false) {
         const btn = document.getElementById('btn-save');
         const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>保存中...';
+        const statusDiv = document.getElementById('save-status');
+        
+        if (!silent) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>保存中...';
+        } else {
+            statusDiv.innerHTML = '<span class="text-primary"><span class="spinner-border spinner-border-sm me-1"></span>自动保存中...</span>';
+        }
 
         const scores = {};
         const inputs = document.querySelectorAll('.score-input');
@@ -239,7 +375,7 @@
             }
         });
 
-        fetch('/api/score-entry/save', {
+        return fetch('/api/score-entry/save', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -254,30 +390,51 @@
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                // Show success toast or simple alert
-                // alert('保存成功');
-                // Instead of alert, change button temporarily
-                btn.innerHTML = '<i class="fas fa-check me-1"></i> 保存成功';
-                btn.classList.remove('btn-primary');
-                btn.classList.add('btn-success');
-                
-                setTimeout(() => {
-                    btn.disabled = false;
-                    btn.innerHTML = originalText;
-                    btn.classList.remove('btn-success');
-                    btn.classList.add('btn-primary');
-                }, 1500);
+                // Update original values
+                inputs.forEach(input => {
+                    input.dataset.originalValue = input.value;
+                });
+                document.getElementById('ai-comment').dataset.originalValue = document.getElementById('ai-comment').value;
+
+                if (!silent) {
+                    btn.innerHTML = '<i class="fas fa-check me-1"></i> 保存成功';
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-success');
+                    
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-save me-1"></i> 保存分数'; // Restore original text manually to avoid icon loss
+                        btn.classList.remove('btn-success');
+                        btn.classList.add('btn-primary');
+                    }, 1500);
+                } else {
+                    statusDiv.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i> 已自动保存</span>';
+                    setTimeout(() => {
+                        statusDiv.innerHTML = '<i class="fas fa-info-circle me-1"></i> 修改后自动保存';
+                    }, 2000);
+                }
+                return result;
             } else {
-                alert('保存失败: ' + result.message);
-                btn.disabled = false;
-                btn.innerHTML = originalText;
+                if (!silent) {
+                    Swal.fire('保存失败', result.message, 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-save me-1"></i> 保存分数';
+                } else {
+                    statusDiv.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i> 自动保存失败: ' + result.message + '</span>';
+                }
+                throw new Error(result.message);
             }
         })
         .catch(err => {
             console.error(err);
-            alert('保存出错');
-            btn.disabled = false;
-            btn.innerHTML = originalText;
+            if (!silent) {
+                Swal.fire('错误', '保存出错', 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save me-1"></i> 保存分数';
+            } else {
+                statusDiv.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i> 保存网络错误</span>';
+            }
+            throw err;
         });
     }
 
@@ -307,14 +464,14 @@
         .then(response => response.json())
         .then(data => {
             if (data.error) {
-                alert('生成失败: ' + data.error);
+                Swal.fire('生成失败', data.error, 'error');
             } else {
                 document.getElementById('ai-comment').value = data.comment;
             }
         })
         .catch(err => {
             console.error(err);
-            alert('生成出错');
+            Swal.fire('错误', '生成出错', 'error');
         })
         .finally(() => {
             btn.disabled = false;

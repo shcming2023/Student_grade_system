@@ -509,20 +509,39 @@
         }
 
         function deleteRegistration(id) {
-            if(!confirm('确定取消该学生的报名？')) return;
-            
-            fetch(`/api/registrations/${id}`, { method: 'DELETE' })
-            .then(res => res.json())
-            .then(result => {
-                if (result.success) {
-                    // Check if mobile or desktop
-                    if(window.innerWidth <= 768) {
-                        loadMobileRegistered();
-                    } else {
-                        loadData();
-                    }
-                } else {
-                    Swal.fire('错误', result.message, 'error');
+            Swal.fire({
+                title: '确定取消报名?',
+                text: "确定要取消该学生的报名吗？",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: '确定取消',
+                cancelButtonText: '保留'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`/api/registrations/${id}`, { method: 'DELETE' })
+                    .then(res => res.json())
+                    .then(result => {
+                        if (result.success) {
+                            Swal.fire({
+                                title: '已取消',
+                                text: '报名已取消',
+                                icon: 'success',
+                                timer: 1500,
+                                showConfirmButton: false
+                            }).then(() => {
+                                // Check if mobile or desktop
+                                if(window.innerWidth <= 768) {
+                                    loadMobileRegistered();
+                                } else {
+                                    loadData();
+                                }
+                            });
+                        } else {
+                            Swal.fire('错误', result.message, 'error');
+                        }
+                    });
                 }
             });
         }
@@ -539,19 +558,30 @@
                  return;
              }
              
-             if(!confirm(`确定取消 ${ids.length} 名学生的报名？`)) return;
-             
-             let errors = 0;
-             
-             Promise.all(ids.map(id => 
-                 fetch(`/api/registrations/${id}`, { method: 'DELETE' })
-                 .then(res => res.json())
-                 .then(r => { if(!r.success) errors++; })
-             )).then(() => {
-                 loadData();
-                 if(errors > 0) Swal.fire('提示', `部分取消失败 (${errors}个)`, 'warning');
-                 else Swal.fire('成功', '批量取消成功', 'success');
-             });
+             Swal.fire({
+                title: '确定批量取消?',
+                text: `确定要取消 ${ids.length} 名学生的报名吗？`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: '确定取消',
+                cancelButtonText: '保留'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                     let errors = 0;
+                     
+                     Promise.all(ids.map(id => 
+                         fetch(`/api/registrations/${id}`, { method: 'DELETE' })
+                         .then(res => res.json())
+                         .then(r => { if(!r.success) errors++; })
+                     )).then(() => {
+                         loadData();
+                         if(errors > 0) Swal.fire('提示', `部分取消失败 (${errors}个)`, 'warning');
+                         else Swal.fire('成功', '批量取消成功', 'success');
+                     });
+                }
+            });
         }
 
         // ================= Mobile Logic (Optimized) =================

@@ -8,9 +8,6 @@
             <h2><i class="fas fa-file-signature me-2 text-wtf"></i>试卷管理</h2>
         </div>
         <div class="col-md-6 text-end">
-            <button class="btn btn-success me-2" onclick="importTemplates()">
-                <i class="fas fa-file-excel me-2"></i>从Excel导入
-            </button>
             <button class="btn btn-wtf" onclick="openCreateModal()">
                 <i class="fas fa-plus me-2"></i>新建试卷模板
             </button>
@@ -18,8 +15,8 @@
     </div>
 
     <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="table-responsive">
+        <div class="card-body p-0 p-md-3">
+            <div class="table-responsive d-none d-md-block">
                 <table class="table table-hover align-middle">
                     <thead class="table-light">
                         <tr>
@@ -61,12 +58,53 @@
                     </tbody>
                 </table>
             </div>
+
+            <!-- Mobile Cards -->
+            <div class="d-md-none p-3">
+                {% for template in templates %}
+                <div class="card mb-3 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h5 class="card-title fw-bold mb-1">{{ template.name }}</h5>
+                                <div class="text-muted small">
+                                    <span class="badge bg-light text-dark border me-1">{{ template.subject.name }}</span>
+                                    <span class="badge bg-light text-dark border me-1">{{ template.grade_level }}</span>
+                                    <span class="badge bg-info text-dark">{{ template.total_questions }} 题</span>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <span class="text-muted small">#{{ template.id }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-2 text-muted small">
+                            <i class="fas fa-calendar-alt me-1"></i> {{ template.sessions|map(attribute='name')|join(', ') if template.sessions else '未关联考试' }}
+                        </div>
+
+                        <div class="d-flex gap-2 mt-3">
+                            <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick='openQuestionsModal({{ template.to_dict()|tojson }})'>
+                                <i class="fas fa-list"></i> 题目
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick='openEditModal({{ template.to_dict()|tojson }})'>
+                                <i class="fas fa-edit"></i> 编辑
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger flex-grow-1" onclick="deleteTemplate({{ template.id }})">
+                                <i class="fas fa-trash"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">暂无试卷数据</div>
+                {% endfor %}
+            </div>
         </div>
     </div>
 
     <!-- Template Modal -->
     <div class="modal fade" id="templateModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-fullscreen-md-down">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalTitle">新建试卷模板</h5>
@@ -139,7 +177,7 @@
 
     <!-- Questions Modal -->
     <div class="modal fade" id="questionsModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-lg modal-fullscreen-md-down">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="questionsModalTitle">管理题目</h5>
@@ -202,80 +240,40 @@
         questionsModal = new bootstrap.Modal(document.getElementById('questionsModal'));
     });
 
-    function importTemplates() {
-        // Fetch sessions first
-        fetch('/api/exam-sessions')
-            .then(res => res.json())
-            .then(data => {
-                const sessions = data.sessions;
-                let options = sessions.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-                
-                Swal.fire({
-                    title: '导入试卷模板',
-                    html: `
-                        <div class="mb-3 text-start">
-                            <label class="form-label">选择Excel文件</label>
-                            <input type="file" id="importFile" class="form-control" accept=".xlsx, .xls">
-                        </div>
-                        <div class="mb-3 text-start">
-                            <label class="form-label">选择考试场次</label>
-                            <select id="importSession" class="form-select">
-                                <option value="">-- 请选择 --</option>
-                                \${options}
-                            </select>
-                        </div>
-                        <p class="text-muted small text-start">注意：导入将覆盖同名试卷的现有题目。</p>
-                    `,
-                    showCancelButton: true,
-                    confirmButtonText: '开始导入',
-                    showLoaderOnConfirm: true,
-                    preConfirm: () => {
-                        const fileInput = document.getElementById('importFile');
-                        const sessionId = document.getElementById('importSession').value;
-                        
-                        if (fileInput.files.length === 0) {
-                            Swal.showValidationMessage('请选择文件');
-                            return false;
-                        }
-                        if (!sessionId) {
-                            Swal.showValidationMessage('请选择考试场次');
-                            return false;
-                        }
-                        
-                        const formData = new FormData();
-                        formData.append('file', fileInput.files[0]);
-                        formData.append('session_id', sessionId);
-                        
-                        return fetch('/api/templates/import', {
-                            method: 'POST',
-                            body: formData
-                        })
-                        .then(response => {
-                            if (!response.ok) {
-                                return response.json().then(err => { throw new Error(err.message || response.statusText) });
-                            }
-                            return response.json()
-                        })
-                        .catch(error => {
-                            Swal.showValidationMessage(
-                                `请求失败: \${error}`
-                            )
-                        })
-                    },
-                    allowOutsideClick: () => !Swal.isLoading()
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        if (result.value.success) {
-                            Swal.fire('成功', result.value.message, 'success').then(() => location.reload());
-                        } else {
-                            Swal.fire('错误', result.value.message, 'error');
-                        }
-                    }
-                })
+
+    function exportTemplatePDFs(templateId, templateName) {
+        Swal.fire({
+            title: '正在生成成绩单...',
+            text: '请稍候，这可能需要几秒钟',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        fetch(`/api/export/pdf/template/${templateId}`)
+            .then(response => {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || '导出失败');
+                    });
+                }
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${templateName}_ReportCards.zip`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                Swal.close();
             })
             .catch(error => {
-                console.error('Error fetching sessions:', error);
-                Swal.fire('错误', '无法获取考试场次列表', 'error');
+                Swal.fire('导出失败', error.message, 'error');
             });
     }
 
@@ -344,7 +342,7 @@
             grader_id: document.getElementById('templateGrader').value || null
         };
         
-        const url = id ? `/api/exam_templates/\${id}` : '/api/exam_templates';
+        const url = id ? `/api/exam_templates/${id}` : '/api/exam_templates';
         const method = id ? 'PUT' : 'POST';
 
         fetch(url, {
@@ -379,7 +377,7 @@
             cancelButtonText: '取消'
         }).then((result) => {
             if (result.isConfirmed) {
-                fetch(`/api/exam_templates/\${id}`, {
+                fetch(`/api/exam_templates/${id}`, {
                     method: 'DELETE'
                 })
                 .then(response => response.json())
@@ -397,7 +395,7 @@
     }
 
     function openQuestionsModal(template) {
-        document.getElementById('questionsModalTitle').textContent = `管理题目 - \${template.name}`;
+        document.getElementById('questionsModalTitle').textContent = `管理题目 - ${template.name}`;
         document.getElementById('currentTemplateId').value = template.id;
         document.getElementById('addQuestionForm').reset();
         loadQuestions(template.id);
@@ -405,7 +403,7 @@
     }
 
     function loadQuestions(templateId) {
-        fetch(`/api/exam_templates/\${templateId}/questions`)
+        fetch(`/api/exam_templates/${templateId}/questions`)
             .then(response => response.json())
             .then(data => {
                 const tbody = document.getElementById('questionsTableBody');
@@ -419,12 +417,12 @@
                 data.forEach(q => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td>\${q.question_number}</td>
-                        <td>\${q.module || '-'}</td>
-                        <td>\${q.knowledge_point || '-'}</td>
-                        <td>\${q.score}</td>
+                        <td>${q.question_number}</td>
+                        <td>${q.module || '-'}</td>
+                        <td>${q.knowledge_point || '-'}</td>
+                        <td>${q.score}</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteQuestion(\${q.id})">
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteQuestion(${q.id})">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </td>
@@ -472,18 +470,30 @@
     }
 
     function deleteQuestion(questionId) {
-        if (!confirm('确定删除此题目吗？')) return;
-        
-        const templateId = document.getElementById('currentTemplateId').value;
-        fetch(`/api/questions/\${questionId}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.success) {
-                loadQuestions(templateId);
-            } else {
-                Swal.fire('错误', result.message, 'error');
+        Swal.fire({
+            title: '确定删除此题目吗？',
+            text: "此操作无法撤销！",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: '确定删除',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const templateId = document.getElementById('currentTemplateId').value;
+                fetch(`/api/questions/\${questionId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        loadQuestions(templateId);
+                        Swal.fire('已删除', '题目已删除', 'success');
+                    } else {
+                        Swal.fire('错误', result.message, 'error');
+                    }
+                });
             }
         });
     }

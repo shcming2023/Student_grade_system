@@ -146,7 +146,7 @@
             if (sessionId) {
                 window.location.href = `/api/stats/export/${sessionId}`;
             } else {
-                alert('请先选择考试场次');
+                Swal.fire('提示', '请先选择考试场次', 'warning');
             }
         });
         

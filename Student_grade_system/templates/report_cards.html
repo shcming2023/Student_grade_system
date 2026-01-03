@@ -100,11 +100,11 @@
                         <div class="col-md-6">
                             <p class="mb-2">已选择 <span id="selectedCount" class="badge bg-primary">0</span> 个学生</p>
                         </div>
-                        <div class="col-md-6 text-end">
-                            <button class="btn btn-success" onclick="generateSelectedPDFs()">
+                        <div class="col-md-6 text-md-end mt-3 mt-md-0 d-grid gap-2 d-md-block">
+                            <button class="btn btn-success me-md-2" onclick="generateSelectedPDFs()">
                                 <i class="bi bi-file-earmark-pdf"></i> 生成选中PDF
                             </button>
-                            <button class="btn btn-info" onclick="emailSelected()">
+                            <button class="btn btn-info me-md-2" onclick="emailSelected()">
                                 <i class="bi bi-envelope"></i> 发送邮件
                             </button>
                             <button class="btn btn-secondary" onclick="clearSelection()">
@@ -275,10 +275,10 @@
                             <div>${statusBadge}</div>
                         </div>
                         <div class="d-flex gap-2">
-                            <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick="previewReportCard(${card.studentId}, ${card.examSessionId}, ${card.templateId})">
+                            <button class="btn btn-sm btn-outline-primary flex-grow-1 py-2" onclick="previewReportCard(${card.studentId}, ${card.examSessionId}, ${card.templateId})">
                                 <i class="bi bi-eye"></i> 预览
                             </button>
-                            <button class="btn btn-sm btn-outline-success flex-grow-1" onclick="downloadPDF(${card.studentId}, ${card.examSessionId}, ${card.templateId})">
+                            <button class="btn btn-sm btn-outline-success flex-grow-1 py-2" onclick="downloadPDF(${card.studentId}, ${card.examSessionId}, ${card.templateId})">
                                 <i class="bi bi-download"></i> PDF
                             </button>
                         </div>
@@ -339,48 +339,95 @@
 
         // 预览成绩单
         function previewReportCard(studentId, examSessionId, templateId) {
-            // 在线预览 (默认 inline)
+            if (!studentId || !examSessionId) {
+                console.error("Invalid parameters for previewReportCard", {studentId, examSessionId, templateId});
+                Swal.fire('错误', '参数缺失，无法预览', 'error');
+                return;
+            }
+
             let url = `/pdf/report-card/${studentId}/${examSessionId}?action=preview`;
             if (templateId) {
                 url += `&template_id=${templateId}`;
             }
+            
+            // 优先使用模态框预览
+            const modalEl = document.getElementById('previewModal');
+            if (modalEl) {
+                try {
+                    const iframe = document.getElementById('previewFrame');
+                    if (iframe) {
+                        iframe.src = url;
+                        // Check if bootstrap is available
+                        if (typeof bootstrap !== 'undefined') {
+                            const modal = new bootstrap.Modal(modalEl);
+                            modal.show();
+                            return;
+                        } else {
+                            console.warn("Bootstrap not found, falling back to window.open");
+                        }
+                    }
+                } catch (e) {
+                    console.error("Modal preview failed:", e);
+                    // Fallback will handle it
+                }
+            }
+            
+            // 降级方案：新窗口打开
             window.open(url, '_blank');
         }
 
         // 下载PDF
         function downloadPDF(studentId, examSessionId, templateId) {
+            if (!studentId || !examSessionId) {
+                Swal.fire('错误', '参数缺失，无法下载', 'error');
+                return;
+            }
+
             // 强制下载
             let url = `/pdf/report-card/${studentId}/${examSessionId}?action=download`;
             if (templateId) {
                 url += `&template_id=${templateId}`;
             }
+            
+            console.log("Downloading PDF from:", url);
             window.location.href = url;
         }
 
         // 邮件发送
         function emailReportCard(studentId, examSessionId, templateId) {
-            if (!confirm('确定要发送邮件给该学生吗？')) return;
-            
-            fetch('/api/email/send-report-card', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    student_id: studentId,
-                    exam_session_id: examSessionId,
-                    template_id: templateId
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.success) {
-                    alert('发送成功');
-                } else {
-                    alert('发送失败: ' + data.message);
+            Swal.fire({
+                title: '确定发送邮件?',
+                text: "确定要发送邮件给该学生吗？",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: '发送',
+                cancelButtonText: '取消'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch('/api/email/send-report-card', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            student_id: studentId,
+                            exam_session_id: examSessionId,
+                            template_id: templateId
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if(data.success) {
+                            Swal.fire('发送成功', '邮件已发送', 'success');
+                        } else {
+                            Swal.fire('发送失败', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('错误', '发送失败', 'error');
+                    });
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('发送失败');
             });
         }
         
@@ -389,13 +436,86 @@
         }
         
         function batchGenerate() {
-            alert('批量生成功能正在优化中，请稍后...');
+            const templateId = document.getElementById('templateFilter').value;
+            if (!templateId) {
+                Swal.fire('提示', '请先选择一个试卷进行批量导出', 'warning');
+                return;
+            }
+            
+            const btn = document.querySelector('button[onclick="batchGenerate()"]');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 导出中...';
+            
+            fetch(`/pdf/batch-report-cards/template/${templateId}`)
+                .then(response => {
+                    if (response.ok) return response.blob();
+                    return response.text().then(text => { throw new Error(text) });
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `批量成绩单_试卷_${templateId}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    Swal.fire('成功', '批量导出已开始下载', 'success');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('导出失败', error.message || '服务器发生错误', 'error');
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                });
         }
         
         function generateSelectedPDFs() {
              if (selectedStudents.size === 0) return;
-             // Implement batch generation for selected
-             alert('选中生成功能正在开发中');
+             
+             const items = Array.from(selectedStudents.values());
+             const btn = document.querySelector('button[onclick="generateSelectedPDFs()"]');
+             const originalText = btn.innerHTML;
+             
+             btn.disabled = true;
+             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 生成中...';
+             
+             fetch('/api/pdf/batch-selected', {
+                 method: 'POST',
+                 headers: {
+                     'Content-Type': 'application/json'
+                 },
+                 body: JSON.stringify({ items: items })
+             })
+             .then(response => {
+                 if (response.ok) {
+                     return response.blob();
+                 }
+                 throw new Error('生成失败');
+             })
+             .then(blob => {
+                 const url = window.URL.createObjectURL(blob);
+                 const a = document.createElement('a');
+                 a.href = url;
+                 a.download = `批量导出_${items.length}项.zip`;
+                 document.body.appendChild(a);
+                 a.click();
+                 window.URL.revokeObjectURL(url);
+                 document.body.removeChild(a);
+                 Swal.fire('成功', '批量导出已开始下载', 'success');
+                 clearSelection();
+             })
+             .catch(error => {
+                 console.error('Error:', error);
+                 Swal.fire('错误', '批量生成失败，请重试', 'error');
+             })
+             .finally(() => {
+                 btn.disabled = false;
+                 btn.innerHTML = originalText;
+             });
         }
         
         function emailSelected() {

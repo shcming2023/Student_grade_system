@@ -8,19 +8,17 @@
             <h2><i class="fas fa-user-graduate me-2 text-wtf"></i>考生管理</h2>
         </div>
         <div class="col-md-6 text-end">
-            <button class="btn btn-outline-primary me-2" onclick="importStudents()">
-                <i class="fas fa-file-import me-2"></i>导入考生
-            </button>
             <button class="btn btn-wtf" onclick="openCreateModal()">
                 <i class="fas fa-plus me-2"></i>新建考生
             </button>
         </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0 p-md-3">
+            <!-- Desktop Table -->
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
                             <th style="display:none;">学号</th>
@@ -56,6 +54,9 @@
                             </td>
                             <td style="display:none;">{{ student.class_name or '-' }}</td>
                             <td>
+                                <button class="btn btn-sm btn-outline-success me-1" onclick="exportStudentPDF({{ student.id }}, '{{ student.name }}')" title="导出所有成绩单">
+                                    <i class="fas fa-file-pdf"></i>
+                                </button>
                                 <button class="btn btn-sm btn-outline-primary me-1" onclick='openEditModal({{ student.to_dict()|tojson }})'>
                                     <i class="fas fa-edit"></i>
                                 </button>
@@ -71,6 +72,51 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Mobile Cards -->
+            <div class="d-md-none p-3">
+                {% for student in students %}
+                <div class="card mb-3 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h5 class="card-title fw-bold mb-1">{{ student.name }}</h5>
+                                <div class="text-muted small">{{ student.school.name if student.school else '未知' }} | {{ student.grade_level }}</div>
+                            </div>
+                            <div>
+                                {% if student.gender == 'M' %}
+                                <span class="badge bg-primary">男</span>
+                                {% elif student.gender == 'F' %}
+                                <span class="badge bg-danger">女</span>
+                                {% else %}
+                                <span class="badge bg-secondary">未知</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            {% for reg in student.registrations %}
+                            <span class="badge bg-info text-dark me-1 mb-1">{{ reg.exam_template.name }}</span>
+                            {% endfor %}
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-success flex-grow-1 py-2" onclick="exportStudentPDF({{ student.id }}, '{{ student.name }}')">
+                                <i class="fas fa-file-pdf"></i> 导出
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary flex-grow-1 py-2" onclick='openEditModal({{ student.to_dict()|tojson }})'>
+                                <i class="fas fa-edit"></i> 编辑
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger flex-grow-1 py-2" onclick="deleteStudent({{ student.id }})">
+                                <i class="fas fa-trash"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">暂无考生数据</div>
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -255,7 +301,7 @@
             registrations: registrations
         };
 
-        const url = id ? `/api/students/\${id}` : '/api/students/create';
+        const url = id ? `/api/students/${id}` : '/api/students/create';
         const method = id ? 'PUT' : 'POST';
 
         fetch(url, {
@@ -265,7 +311,16 @@
             },
             body: JSON.stringify(data)
         })
-        .then(response => response.json())
+        .then(response => {
+            return response.text().then(text => {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error("Non-JSON response received:", text);
+                    throw new Error("Server returned invalid response format");
+                }
+            });
+        })
         .then(result => {
             if (result.success) {
                 Swal.fire('成功', result.message, 'success').then(() => {
@@ -277,78 +332,47 @@
         })
         .catch(error => {
             console.error('Error:', error);
-            Swal.fire('错误', '系统错误，请重试', 'error');
+            Swal.fire('错误', '系统错误，请重试。详情请查看控制台。', 'error');
         });
     }
 
-    function importStudents() {
-        // Fetch sessions first
-        fetch('/api/exam-sessions')
-            .then(res => res.json())
-            .then(data => {
-                const sessions = data.sessions;
-                let options = sessions.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-                
-                Swal.fire({
-                    title: '导入考生数据',
-                    html: `
-                        <div class="mb-3 text-start">
-                            <label class="form-label">选择Excel文件</label>
-                            <input type="file" id="importFile" class="form-control" accept=".xlsx, .xls">
-                        </div>
-                        <div class="mb-3 text-start">
-                            <label class="form-label">选择考试场次</label>
-                            <select id="importSession" class="form-select">
-                                \${options}
-                            </select>
-                        </div>
-                        <p class="text-muted small text-start">若不上传文件，将使用服务器默认样本数据。</p>
-                    `,
-                    showCancelButton: true,
-                    confirmButtonText: '开始导入',
-                    showLoaderOnConfirm: true,
-                    preConfirm: () => {
-                        const fileInput = document.getElementById('importFile');
-                        const sessionId = document.getElementById('importSession').value;
-                        
-                        const formData = new FormData();
-                        if (fileInput.files.length > 0) {
-                            formData.append('file', fileInput.files[0]);
-                        }
-                        formData.append('session_id', sessionId);
-                        
-                        return fetch('/api/students/import', {
-                            method: 'POST',
-                            body: formData
-                        })
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error(response.statusText)
-                            }
-                            return response.json()
-                        })
-                        .catch(error => {
-                            Swal.showValidationMessage(
-                                `请求失败: \${error}`
-                            )
-                        })
-                    },
-                    allowOutsideClick: () => !Swal.isLoading()
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        if (result.value.success) {
-                            Swal.fire('成功', result.value.message, 'success').then(() => location.reload());
-                        } else {
-                            Swal.fire('错误', result.value.message, 'error');
-                        }
-                    }
-                })
+    function exportStudentPDF(studentId, studentName) {
+        Swal.fire({
+            title: '正在生成成绩单...',
+            text: '请稍候，这可能需要几秒钟',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        fetch(`/api/export/pdf/student/${studentId}`)
+            .then(response => {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.message || '导出失败');
+                    });
+                }
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${studentName}_ReportCards.zip`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                Swal.close();
             })
             .catch(error => {
-                console.error('Error fetching sessions:', error);
-                Swal.fire('错误', '无法获取考试场次列表', 'error');
+                Swal.fire('导出失败', error.message, 'error');
             });
     }
+
+
     
     function deleteStudent(id) {
         Swal.fire({
@@ -362,7 +386,7 @@
             cancelButtonText: '取消'
         }).then((result) => {
             if (result.isConfirmed) {
-                fetch(`/api/students/\${id}`, {
+                fetch(`/api/students/${id}`, {
                     method: 'DELETE'
                 })
                 .then(response => response.json())
